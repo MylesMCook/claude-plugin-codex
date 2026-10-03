@@ -83,3 +83,23 @@ Read-only process inspection found no surviving test-owned provider/supervisor
 process from the unintended launch. The paused follow-up validation tree was
 stopped by its observed PIDs only; unrelated existing Claude processes were left
 alone. Logs are local diagnostic evidence, not real integration proof.
+
+## Activation
+
+Install this fork with the supported Codex marketplace/plugin commands in README.
+The manifest retains upstream version 0.1.18; record the installed Git commit as
+the build identity. Install `frontend-design@claude-plugins-official` with Claude's
+plugin manager. Verify subscription authentication in the process that will run
+the advisor, then use `$claude ux --billing-source subscription <question>`.
+
+Start a new Codex thread to load newly installed skills and any global AGENTS
+routing change. Existing Claude sessions may need `/reload-plugins` or a fresh
+session; a new companion print invocation loads installed plugins afresh. Do not
+restart active apps or sessions automatically. More specific project policies
+apply. Provider-call approval must cover the exact context; private source,
+screenshots and sensitive data always require permission before transmission.
+A global routing rule proposes the advisor, keeps Codex responsible for code and
+verification, and must not cause recursive consultations or background retries.
+
+The CI workflow also supports manual dispatch so the reviewed synthetic suite
+can be verified on a chosen published fork ref without invoking either model.
