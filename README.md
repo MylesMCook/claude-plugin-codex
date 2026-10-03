@@ -20,6 +20,19 @@ project. The project retains its MIT licence and original attribution.
 
 ## Install
 
+For the UX advisor build in this fork:
+
+```bash
+codex plugin marketplace add MylesMCook/claude-plugin-codex
+codex plugin add claude-code-advisor@claude-plugin-codex
+```
+
+The manifest retains the upstream version; identify this build by its fork Git
+commit. Start a new Codex thread after installation to load the updated skill.
+Use `$claude ux --billing-source subscription <question>` after approving the
+exact context to send. Install Anthropic's official `frontend-design` Claude
+plugin separately. Codex implements the advice and remains the primary agent.
+
 Add the public marketplace and install the plugin:
 
 ```bash
@@ -548,3 +561,43 @@ review.
 ## License
 
 MIT.
+
+## Codex-primary UX advice (local fork changes)
+
+After approving the exact context to send to Claude, use:
+
+```text
+$claude ux --billing-source subscription "Review navigation in the named local files; return advice for Codex."
+```
+
+The focused `ux` preset explicitly asks Claude print mode to use the installed
+`frontend-design:frontend-design` skill. It does not install or copy Anthropic's
+skill. If unavailable, Claude is instructed to stop. Codex implements the advice.
+The preset refuses write, background, resume, web and MCP options, uses at most
+six turns and 120 seconds, and never retries in the background. The existing
+`advise`/`do`/`rescue` behavior is unchanged, including their legacy fallback.
+
+Before the advice call it runs `claude auth status` and projects only login and
+billing-source enums. `--billing-source subscription|api|third-party` must match;
+unknown or mismatched evidence stops the call. Subscription classification needs
+recognized OAuth authentication and subscription type. API/provider environment
+overrides take precedence. This is source checking, not a promise of price or
+remaining quota; provider billing remains authoritative. No credential values,
+account details or raw auth output are persisted or displayed.
+
+Desktop hosts can use native Claude Code in PATH or `~/.local/bin`; macOS also
+checks Homebrew locations. Set `CLAUDE_COMPANION_EXECUTABLE` to an absolute native
+CLI path if needed. Windows requires `claude.exe`, including paths with spaces;
+`.cmd`/`.bat` shims are refused to avoid shell interpolation. The Claude Desktop
+app alone does not provide this CLI. Discovery does not install or invoke it.
+Windows discovery is covered by synthetic tests; native Windows/WSL execution
+and real Desktop/model integration remain unverified.
+
+Copy the shared routing rule in this repository's AGENTS.md into a project only
+when desired; nothing here modifies global instructions or configuration.
+See [UX advisor verification and approvals](docs/ux-advisor.md).
+
+`npm test` runs the synthetic suite through an isolated test runner. All provider
+harnesses pin test-owned mocks and use temporary home/configuration/state; a
+missing mock fails closed instead of discovering an installed Claude CLI.
+Smoke and Codex E2E commands are separate real-provider checks requiring approval.

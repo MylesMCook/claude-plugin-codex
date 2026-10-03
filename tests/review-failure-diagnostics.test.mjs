@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import {
   resolveStateDir, saveState, STATE_VERSION, SUPERVISED_RECORD_VERSION, SUPERVISED_TRANSPORT
@@ -69,8 +70,8 @@ net.createConnection = net.connect = () => reject("socket");
 require("node:module").syncBuiltinESMExports();
 `);
   const env = {
-    ...process.env,
-    PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    CLAUDE_COMPANION_EXECUTABLE: path.join(bin, "claude"),
     CLAUDE_COMPANION_STATE_ROOT: path.join(root, "state"),
     CODEX_THREAD_ID: threadId
   };
@@ -185,11 +186,11 @@ for (const kind of ["review", "adversarial-review"]) {
     for (const [classification, response] of Object.entries({
       "command-failure": { exit: 7 },
       "invalid-result": {},
-      timeout: { delayMs: 2000 }
+      timeout: { delayMs: 4000 }
     })) {
       await t.test(classification, (t) => {
         const f = fixture(t, response);
-        const run = f.invoke([kind, "synthetic review", ...(classification === "timeout" ? ["--timeout-ms", "300"] : [])], { readback: false });
+        const run = f.invoke([kind, "synthetic review", ...(classification === "timeout" ? ["--timeout-ms", "1000"] : [])], { readback: false });
         assert.equal(run.status, 1, run.stderr);
         assertRedacted(run);
         const published = JSON.parse(run.stdout);

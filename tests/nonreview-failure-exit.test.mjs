@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
 
@@ -23,8 +24,7 @@ function fixture(t, { kind, resumed, write, outcome }) {
   const invocationLog = path.join(root, "invocations.jsonl");
   for (const directory of [repo, bin, home]) fs.mkdirSync(directory);
   const env = {
-    HOME: home,
-    PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
     TMPDIR: root,
     GIT_CONFIG_NOSYSTEM: "1",
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,

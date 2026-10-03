@@ -163,7 +163,7 @@ assert.match(companion, /spawn\(process\.execPath, \[supervisorScript\]/);
 assert.doesNotMatch(companion, /runClaude\(\["(?:agents|logs|stop)"/);
 assert.match(supervisor, /claude-group-worker\.mjs/);
 assert.doesNotMatch(supervisor, /spawn\("claude"/);
-assert.match(groupWorker, /spawn\("claude", config\.claudeArgs/);
+assert.match(groupWorker, /spawn\(discoverClaude\(\), config\.claudeArgs/);
 assert.match(groupWorker, /stdio: \["pipe", "pipe", "pipe"\]/);
 assert.match(groupWorker, /process\.kill\(-process\.pid, "SIGTERM"\)/);
 assert.match(groupWorker, /process\.kill\(-process\.pid, "SIGKILL"\)/);

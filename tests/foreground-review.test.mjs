@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
 
@@ -54,8 +55,7 @@ else process.exit(response.exit || 0);
 `);
   fs.chmodSync(path.join(bin, "claude"), 0o755);
   const env = {
-    ...process.env,
-    PATH: `${bin}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: "foreground-review-authority-test"
   };
@@ -259,8 +259,8 @@ for (const command of ["review", "adversarial-review"]) {
   });
 
   test(`${command} timeout fails without a retry or background fallback`, (t) => {
-    const f = fixture(t, [{ stdout: envelope(sentinels[0]), delayMs: 2000 }]);
-    const run = f.invoke([command, sentinels[2], "--timeout-ms", "300"]);
+    const f = fixture(t, [{ stdout: envelope(sentinels[0]), delayMs: 4000 }]);
+    const run = f.invoke([command, sentinels[2], "--timeout-ms", "1000"]);
     assert.equal(run.status, 1);
     const published = JSON.parse(run.stdout);
     const jobs = f.readState().jobs;

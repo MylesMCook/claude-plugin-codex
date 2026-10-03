@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
 
@@ -33,8 +34,7 @@ process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_err
   session_id: ${JSON.stringify(sessionId)}, result: "Synthetic continuation" }));
 `, { mode: 0o755 });
   const env = {
-    ...process.env,
-    PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: currentThreadId,
     SYNTHETIC_PROVIDER_FAIL: "0"

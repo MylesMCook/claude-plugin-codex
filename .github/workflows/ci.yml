@@ -25,3 +25,18 @@ jobs:
           package-manager-cache: false
       - run: npm test
       - run: node tests/validate-plugin.mjs
+
+  ux-portability:
+    name: UX discovery on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: node --test tests/ux-advisor.test.mjs tests/test-isolation.test.mjs

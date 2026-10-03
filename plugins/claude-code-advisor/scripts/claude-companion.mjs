@@ -38,6 +38,8 @@ import {
   validateReviewPayload
 } from "./lib/runtime.mjs";
 
+import { discoverClaude, inspectAuthentication, prepareUxTask } from "./lib/local-cli.mjs";
+
 const supervisorScript = fileURLToPath(new URL("./claude-supervisor.mjs", import.meta.url));
 
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -230,11 +232,12 @@ function formatDuration(ms) {
 function runClaude(args, options = {}) {
   const env = { ...process.env, NO_COLOR: "1" };
   delete env.FORCE_COLOR;
-  const result = spawnSync("claude", args, {
+  const result = spawnSync(discoverClaude({ env }), args, {
     cwd: options.cwd || process.cwd(),
     env,
     encoding: options.rawOutput ? null : "utf8",
     input: options.input,
+    killSignal: options.killSignal || "SIGTERM",
     timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   });
 
@@ -762,6 +765,7 @@ async function runForeground(ctx, kind, prompt, options = {}) {
       cwd: ctx.cwd,
       input: prompt,
       rawOutput: isReview,
+      killSignal: kind === "ux" ? "SIGKILL" : "SIGTERM",
       timeoutMs: Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)
     });
   } catch (error) {
@@ -953,7 +957,18 @@ async function runBackground(ctx, kind, prompt, options = {}) {
 async function handleTaskCommand(argv, kind) {
   const { options, positionals } = parseArgs(argv);
   const ctx = currentContext(options);
-  const prompt = positionals.join(" ").trim();
+  let prompt = positionals.join(" ").trim();
+  if (kind === "ux") {
+    const prepared = prepareUxTask(options, prompt);
+    Object.assign(options, prepared.options);
+    prompt = prepared.prompt;
+    let auth;
+    try { auth = inspectAuthentication(runClaude(["auth", "status"], { timeoutMs: SETUP_LOCAL_TIMEOUT_MS, killSignal: "SIGKILL" })); }
+    catch { throw new Error("UX authentication check failed; no advice call was made."); }
+    if (!auth.loggedIn || auth.billingSource !== options["billing-source"]) {
+      throw new Error(`UX authentication/billing check refused: loggedIn=${auth.loggedIn}, billingSource=${auth.billingSource}. No advice call was made.`);
+    }
+  }
   const job = options.background
     ? await runBackground(ctx, kind, prompt, options)
     : await runForeground(ctx, kind, prompt, {
@@ -1488,6 +1503,7 @@ function printUsage() {
     [
       "Usage:",
       "  claude-companion setup [--json]",
+      "  claude-companion ux --billing-source subscription|api|third-party [--timeout-ms <100–120000>] [--max-turns <1–6>] <question>",
       "  claude-companion advise [--background] [--write] [--max-turns <n>] [--effort <level>] [--allow-mcp] [--allow-web] [--no-background-fallback] [prompt]",
       "  claude-companion do [--background] [--write] [--model <model>] [--max-turns <n>] [--effort <level>] [--allow-mcp] [--allow-web] [prompt]",
       "  claude-companion rescue [--background] [--write] [--resume] [--model <model>] [--max-turns <n>] [--effort <level>] [--allow-mcp] [--allow-web] [--no-background-fallback] [prompt]",
@@ -1511,6 +1527,9 @@ async function main() {
   switch (command) {
     case "setup":
       handleSetup(argv);
+      break;
+    case "ux":
+      await handleTaskCommand(argv, "ux");
       break;
     case "advise":
       await handleAdvise(argv);

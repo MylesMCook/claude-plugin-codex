@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -52,9 +53,9 @@ function makeHarness(overrides = {}) {
   };
   fs.writeFileSync(scenarioFile, JSON.stringify(scenario), "utf8");
   const env = {
-    ...process.env,
-    PATH: `${binDir}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, fakeClaude),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
+    CLAUDE_COMPANION_EXECUTABLE: fakeClaude,
     CLAUDE_TEST_SCENARIO: scenarioFile
   };
   return { root, repo, stateRoot, scenarioFile, scenario, env };
@@ -237,7 +238,7 @@ test("supervisor uses a persistent checked-in group leader as the live signallin
   const workerSource = fs.readFileSync(groupWorker, "utf8");
   assert.match(supervisorSource, /claude-group-worker\.mjs/);
   assert.doesNotMatch(supervisorSource, /spawn\("claude"/);
-  assert.match(workerSource, /spawn\("claude"/);
+  assert.match(workerSource, /spawn\(discoverClaude\(\)/);
   assert.match(workerSource, /provider-close/);
   assert.match(workerSource, /terminateOwnGroup/);
 });

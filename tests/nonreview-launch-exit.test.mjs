@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 import { fileURLToPath } from "node:url";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
@@ -52,8 +53,7 @@ const timer = setInterval(() => {
 }, 10);
 `, { mode: 0o755 });
   const env = {
-    HOME: home,
-    PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
     // A nested fixture TMPDIR can exceed macOS's Unix socket path limit.
     TMPDIR: os.tmpdir(),
     GIT_CONFIG_NOSYSTEM: "1",

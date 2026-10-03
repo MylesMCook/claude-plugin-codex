@@ -21,6 +21,7 @@ Canonical forms:
 
 ```text
 $claude setup
+$claude ux --billing-source subscription|api|third-party <question>
 $claude advise [--max-turns <n>] <question>
 $claude do [--background] [--write] [--model sonnet|opus] [--max-turns <n>] <prepared task>
 $claude rescue [--background] [--write] [--resume] [--model sonnet|opus] [--max-turns <n>] <task>
@@ -116,6 +117,19 @@ commands. The guaranteed Codex surface is the `$claude` skill mention.
   Do not delete or silently replace the preserved evidence with empty state.
 
 ## Routing
+
+- `ux`: focused read-only UX advice. First report the exact command, selected
+  workspace/files, prompt and intended billing source and obtain permission to
+  send that context to Claude. Route through the companion `ux` command with
+  `--billing-source subscription|api|third-party`. It invokes the installed
+  `frontend-design:frontend-design` skill through an explicit print-mode prompt,
+  not a slash command. Claude returns recommendations; Codex implements and
+  verifies them. Never substitute `do --write`, background mode or retries.
+  Defaults: six turns, 120 seconds, local reads plus the frontend-design Skill
+  tool, no MCP/web. Report missing skill/auth/billing evidence as a prerequisite.
+  Install/enable Anthropic's frontend-design plugin separately only when approved.
+  An allowed Skill tool is needed to load its instructions; do not add Bash,
+  Edit, Write, Agent or unrestricted tools to help it implement those instructions.
 
 - `setup`: run the companion setup command and show the result. Authentication
   is checked in the current process. If it is unavailable, distinguish host

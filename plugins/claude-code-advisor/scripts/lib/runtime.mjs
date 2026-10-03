@@ -648,7 +648,7 @@ export function buildClaudeArgs(options) {
   if (write === "implicit") {
     throw new Error("Write-capable Claude work requires explicit --write.");
   }
-  if (write && (mode === "review" || mode === "adversarial-review")) {
+  if (write && (mode === "review" || mode === "adversarial-review" || mode === "ux")) {
     throw new Error(`${mode} is read-only and does not support --write. Use advise, do or rescue --write for write-capable work.`);
   }
   if (!prompt || !String(prompt).trim()) {
@@ -676,6 +676,8 @@ export function buildClaudeArgs(options) {
 
   if (write) {
     args.push("--permission-mode", "default");
+  } else if (mode === "ux") {
+    args.push("--tools", "Read,Glob,Grep,Skill", "--allowedTools", "Read,Glob,Grep,Skill(frontend-design:frontend-design)", "--permission-mode", "dontAsk");
   } else if (mode === "review" || mode === "adversarial-review") {
     // With no built-in tools and isolated MCP, reviews need no interactive
     // planning workflow. Preserve Plan Mode for explicitly allowed MCP tools.

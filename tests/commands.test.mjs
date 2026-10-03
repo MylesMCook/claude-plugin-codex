@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import {
   buildReviewPrompt,
@@ -82,7 +83,7 @@ console.error("unsupported"); process.exit(2);
   });
   fs.chmodSync(stateRoot, 0o755);
   const stdout = execFileSync(process.execPath, [companion, "setup", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -160,7 +161,7 @@ const childProcess = require("node:child_process");
 const { syncBuiltinESMExports } = require("node:module");
 const original = childProcess.spawnSync;
 childProcess.spawnSync = function(command, args, options) {
-  if (command === "claude") {
+  if (command === "claude" || command === "${fs.realpathSync(fake.bin)}") {
     const probe = args.includes("-p") ? "print" : args[0] === "auth" ? "auth" : "version";
     fs.appendFileSync(${JSON.stringify(deadlineLog)}, JSON.stringify({ probe, timeoutMs: options.timeout }) + "\\n");
     if (${JSON.stringify(probeError)}?.startsWith(probe + "-")) {
@@ -177,8 +178,7 @@ syncBuiltinESMExports();
 `);
   const result = spawnSync(process.execPath, ["--require", preload, companion, "setup", "--json"], {
     env: {
-      ...process.env,
-      PATH: `${fake.dir}:${process.env.PATH}`,
+      ...isolatedClaudeEnv(fake.dir, fake.bin),
       CLAUDE_COMPANION_STATE_ROOT: stateRoot,
       CLAUDE_PLUGIN_CODEX_ALLOW_UNKNOWN_CLAUDE: ""
     },
@@ -296,7 +296,7 @@ console.error("unsupported"); process.exit(2);
 `);
     const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
     const stdout = execFileSync(process.execPath, [companion, command, prompt, "--json"], {
-      env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+      env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
       cwd: stateRoot,
       encoding: "utf8"
     });
@@ -325,8 +325,7 @@ console.error("unsupported"); process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const repo = initRepo("claude-review-result-");
   const env = {
-    ...process.env,
-    PATH: `${fake.dir}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(fake.dir, fake.bin),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: "thread-a"
   };
@@ -367,7 +366,7 @@ process.exit(0);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const focus = "focus-marker-a61c";
   const stdout = execFileSync(process.execPath, [companion, "adversarial-review", focus, "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: repo,
     encoding: "utf8"
   });
@@ -417,7 +416,7 @@ console.error("unsupported"); process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
 
   execFileSync(process.execPath, [companion, "review", "--base", base, "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: repo,
     encoding: "utf8"
   });
@@ -449,7 +448,7 @@ console.error("unsupported"); process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
 
   execFileSync(process.execPath, [companion, "review", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: repo,
     encoding: "utf8"
   });
@@ -473,7 +472,7 @@ process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
 
   const reviewed = spawnSync(process.execPath, [companion, "review", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: repo,
     encoding: "utf8"
   });
@@ -500,7 +499,7 @@ console.error("unsupported"); process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const repo = initRepo("claude-review-turns-");
   const stdout = execFileSync(process.execPath, [companion, "review", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: repo,
     encoding: "utf8"
   });
@@ -513,7 +512,7 @@ test("foreground advise defaults to a larger turn budget", () => {
   const fake = makeFakeClaudeExpectingMaxTurns(20);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "advise", "check architecture", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -527,7 +526,7 @@ test("foreground do defaults to a larger turn budget", () => {
   const fake = makeFakeClaudeExpectingMaxTurns(20);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "do", "inspect local code", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -541,7 +540,7 @@ test("foreground rescue defaults to a larger turn budget", () => {
   const fake = makeFakeClaudeExpectingMaxTurns(20);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "rescue", "diagnose the failure", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -558,7 +557,7 @@ test("foreground task max-turn override takes precedence over the default", () =
     process.execPath,
     [companion, "do", "--max-turns", "5", "inspect local code", "--json"],
     {
-      env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+      env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
       cwd: stateRoot,
       encoding: "utf8"
     }
@@ -580,7 +579,7 @@ console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const result = spawnSync(process.execPath, [companion, "do", "inspect local code", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -608,7 +607,7 @@ console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "advise", "check architecture", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -630,7 +629,7 @@ console.error("unsupported"); process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   fs.writeFileSync(path.join(stateRoot, ".mcp.json"), '{"mcpServers":{"playwright":{}}}\n', "utf8");
   const result = spawnSync(process.execPath, [companion, "advise", "--background", "check architecture", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -655,7 +654,7 @@ console.error("unsupported"); process.exit(2);
   fs.writeFileSync(path.join(parent, ".mcp.json"), '{"mcpServers":{"playwright":{}}}\n', "utf8");
   fs.writeFileSync(path.join(child, ".git"), "gitdir: ../.git/worktrees/task\n", "utf8");
   const result = spawnSync(process.execPath, [companion, "advise", "--background", "check architecture", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: parent },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: parent },
     cwd: child,
     encoding: "utf8"
   });
@@ -681,7 +680,7 @@ console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "do", "inspect local code", "--json"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -701,7 +700,7 @@ if (args.includes("-p")) {
 }
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
-  const env = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot };
+  const env = { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot };
   const stdout = execFileSync(
     process.execPath,
     [companion, "advise", "--timeout-ms", "50", "check architecture", "--json"],
@@ -735,7 +734,7 @@ else process.exit(2);
     process.execPath,
     [companion, "advise", "--timeout-ms", "50", "slow", "--json"],
     {
-      env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+      env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
       cwd: stateRoot,
       encoding: "utf8"
     }
@@ -750,7 +749,7 @@ else process.exit(2);
     false
   );
   const stateDir = resolveStateDir(fs.realpathSync(stateRoot), {
-    ...process.env,
+    ...isolatedClaudeEnv(fake.dir, fake.bin),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot
   }, stateRoot);
   const state = JSON.parse(fs.readFileSync(path.join(stateDir, "state.json"), "utf8"));
@@ -774,7 +773,7 @@ if (args.includes("-p")) {
     process.execPath,
     [companion, "advise", "--timeout-ms", "50", "--no-background-fallback", "slow"],
     {
-      env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+      env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
       cwd: stateRoot,
       encoding: "utf8"
     }
@@ -792,7 +791,7 @@ console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const stdout = execFileSync(process.execPath, [companion, "advise", "check architecture"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });
@@ -815,7 +814,7 @@ if (args.includes("-p")) {
 console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
-  const env = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot };
+  const env = { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot };
   const stdout = execFileSync(process.execPath, [companion, "rescue", "--write", "fix the failing test", "--json"], {
     env,
     cwd: stateRoot,
@@ -850,7 +849,7 @@ if (args.includes("-p")) {
 console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
-  const env = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot };
+  const env = { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot };
   const stdout = execFileSync(process.execPath, [companion, "rescue", "diagnose the failure", "--json"], {
     env,
     cwd: stateRoot,
@@ -881,7 +880,7 @@ if (args.includes("-p")) {
 console.error("unsupported"); process.exit(2);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
-  const env = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot };
+  const env = { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot };
   const stdout = execFileSync(
     process.execPath,
     [companion, "do", "--write", "--model", "sonnet", "implement the prepared task", "--json"],
@@ -907,7 +906,7 @@ test("working-tree and base reviews fail closed when the diff exceeds one MiB", 
     }
     const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
     const args = [companion, "review", ...(mode === "base" ? ["--base", base] : []), "--json"];
-    const reviewed = spawnSync(process.execPath, args, { env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot }, cwd: repo, encoding: "utf8" });
+    const reviewed = spawnSync(process.execPath, args, { env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot }, cwd: repo, encoding: "utf8" });
     assert.notEqual(reviewed.status, 0);
     assert.match(reviewed.stderr, /1048576-byte review limit/);
     assert.equal(fs.existsSync(called), false);
@@ -934,7 +933,7 @@ process.exit(2);
   ].join("\n").trim();
   const expectedPrompt = buildReviewPrompt({ kind: "review", targetLabel: "working tree", gitContext });
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
-  execFileSync(process.execPath, [companion, "review", "--json"], { env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot }, cwd: repo, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 });
+  execFileSync(process.execPath, [companion, "review", "--json"], { env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot }, cwd: repo, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 });
   const invocation = JSON.parse(fs.readFileSync(invocationLog, "utf8"));
   const deliveredPrompt = Buffer.from(invocation.stdinBase64, "base64").toString("utf8");
   assert.equal(deliveredPrompt, expectedPrompt);
@@ -951,7 +950,7 @@ fs.appendFileSync(${JSON.stringify(providerLog)},JSON.stringify(args)+"\\n");
 process.exit(2);
 `);
   const workspace = initRepo("claude-monitor-validation-");
-  const baseEnv = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}` };
+  const baseEnv = { ...isolatedClaudeEnv(fake.dir, fake.bin) };
   const run = (stateRoot, args) => spawnSync(process.execPath, [companion, ...args, "--json"], {
     env: { ...baseEnv, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: workspace,
@@ -1017,7 +1016,7 @@ test("Git execution and invalid-base errors fail before Claude review", () => {
   const fake = makeFakeClaude(`const fs=require("node:fs");fs.writeFileSync(${JSON.stringify(called)},"called");process.exit(2);`);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "claude-not-repo-"));
-  const env = { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot };
+  const env = { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot };
   const executionError = spawnSync(process.execPath, [companion, "review", "--json"], { env, cwd: notRepo, encoding: "utf8" });
   assert.notEqual(executionError.status, 0);
   assert.match(executionError.stderr, /Git exited with status/);
@@ -1034,7 +1033,7 @@ setTimeout(() => {}, 5000);
 `);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const result = spawnSync(process.execPath, [companion, "advise", "--timeout-ms", "50", "--no-background-fallback", "slow"], {
-    env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}`, CLAUDE_COMPANION_STATE_ROOT: stateRoot },
+    env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
     encoding: "utf8"
   });

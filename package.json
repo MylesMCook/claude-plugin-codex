@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node tests/run-synthetic.mjs",
     "test:smoke": "node tests/smoke-installed-tools.mjs",
     "test:e2e:codex": "node tests/e2e-codex-skill.mjs",
     "validate": "npm test && node tests/validate-plugin.mjs"

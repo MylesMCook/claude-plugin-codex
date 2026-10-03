@@ -59,3 +59,14 @@ npx ctx7@latest docs "<library-id>" "<question>"
 
 Do not use Context7 for ordinary refactors, business-logic debugging, code
 review, or scripts written from scratch.
+
+## Shared Codex / Claude UX routing
+
+Codex owns planning, code changes, tools and verification. For an explicitly
+approved UX consultation, use `$claude ux --billing-source <source> <question>`
+with a bounded question and named local files. Claude is a read-only advisor
+using Anthropic's installed frontend-design skill; it returns recommendations
+and acceptance checks for Codex to implement. Report the exact action/context
+and confirm permission before a Claude call. Do not silently send private code,
+install plugins, change global configuration, or retry in the background.
+This repository rule is a template for project AGENTS.md, not a global install.

@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 import {
   resolveStateDir, saveState, STATE_VERSION, SUPERVISED_RECORD_VERSION, SUPERVISED_TRANSPORT
@@ -40,8 +41,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
   }))});
 `, { mode: 0o755 });
   const env = {
-    ...process.env,
-    PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`,
+    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: threadId
   };

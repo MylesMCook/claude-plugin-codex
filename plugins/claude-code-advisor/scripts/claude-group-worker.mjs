@@ -4,6 +4,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import process from "node:process";
 
+import { discoverClaude } from "./lib/local-cli.mjs";
+
 const CONFIG_LIMIT_BYTES = 2 * 1024 * 1024;
 const TERMINATION_GRACE_MS = 500;
 let terminating = false;
@@ -77,7 +79,7 @@ process.on("message", (message) => {
 
 async function main() {
   const config = await readConfig();
-  const provider = spawn("claude", config.claudeArgs, {
+  const provider = spawn(discoverClaude(), config.claudeArgs, {
     cwd: config.cwd,
     env: { ...process.env, NO_COLOR: "1" },
     detached: false,
