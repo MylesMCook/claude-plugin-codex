@@ -4,7 +4,7 @@ import path from "node:path";
 
 // Build a fresh allowlisted environment; never spread process.env. Every
 // provider-reaching harness pins a test-owned mock even when testing its absence.
-export function isolatedClaudeEnv(root, executable = path.join(root, "missing-mock-claude")) {
+export function isolatedClaudeEnv(root, executable = path.join(root, process.platform === "win32" ? "missing-mock-claude.exe" : "missing-mock-claude")) {
   const canonicalRoot = fs.realpathSync(root);
   const requestedExecutable = path.resolve(executable);
   if (fs.existsSync(requestedExecutable) && fs.lstatSync(requestedExecutable).isSymbolicLink()) throw new Error("Mock executable cannot be a symlink.");
