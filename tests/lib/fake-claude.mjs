@@ -10,11 +10,8 @@ export const fakeClaudeName = process.platform === "win32" ? "claude.exe" : "cla
 export const fixtureTimeoutMs = process.platform === "win32" ? 60000 : 5000;
 let nativeLauncher;
 
-export function writeFakeClaude(executable, source, options = {}) {
-  if (process.platform !== "win32") {
-    fs.writeFileSync(executable, source, { encoding: "utf8", mode: 0o755 });
-    return;
-  }
+export function nativeUtility() {
+  if (process.platform !== "win32") throw new Error("Windows native utility unavailable.");
   if (!nativeLauncher) {
     const build = fs.mkdtempSync(path.join(os.tmpdir(), "claude-native-mock-"));
     nativeLauncher = path.join(build, "provider.exe");
@@ -23,6 +20,19 @@ export function writeFakeClaude(executable, source, options = {}) {
     execFileSync(compiler, ["/nologo", "/target:exe", `/out:${nativeLauncher}`, code], { stdio: "pipe" });
     process.once("exit", () => fs.rmSync(build, { recursive: true, force: true }));
   }
+  return nativeLauncher;
+}
+
+export function windowsProcesses() {
+  return JSON.parse(execFileSync(nativeUtility(), ["--list-processes"], { encoding: "utf8", timeout: 10000, windowsHide: true }));
+}
+
+export function writeFakeClaude(executable, source, options = {}) {
+  if (process.platform !== "win32") {
+    fs.writeFileSync(executable, source, { encoding: "utf8", mode: 0o755 });
+    return;
+  }
+  const nativeLauncher = nativeUtility();
   const script = `${executable}.${options.module ? "mjs" : "cjs"}`;
   fs.writeFileSync(script, source, "utf8");
   fs.copyFileSync(nativeLauncher, executable);

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       windows_probe_only:
-        description: Run the bounded Windows ACL environment diagnostic only
+        description: Run the bounded Windows privacy and native utility preflight only
         type: boolean
         default: false
   pull_request:
@@ -34,7 +34,7 @@ jobs:
       - run: node tests/validate-plugin.mjs
 
   ux-portability:
-    name: Full validation on ${{ matrix.os }}
+    name: ${{ inputs.windows_probe_only && 'Windows preflight' || format('Full validation on {0}', matrix.os) }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -47,6 +47,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - if: runner.os == 'Windows'
-        run: node tests/windows-acl-probe.mjs
+        run: |
+          node --test tests/private-path.test.mjs
+          node --test --test-name-pattern "native mock forwards|native Windows process inspection" tests/windows-provider.test.mjs
       - if: ${{ !inputs.windows_probe_only }}
         run: npm run validate

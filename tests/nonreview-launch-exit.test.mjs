@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
-import { fakeClaudeName, writeFakeClaude } from "./lib/fake-claude.mjs";
+import { fakeClaudeName, writeFakeClaude, windowsProcesses } from "./lib/fake-claude.mjs";
 import { fileURLToPath } from "node:url";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
@@ -29,13 +29,6 @@ function processIdentity(pid) {
   return result.status === 0 ? result.stdout.trim() || null : null;
 }
 
-function windowsProcesses() {
-  const script = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $null -ne $_.CreationDate } | ForEach-Object { @{pid=$_.ProcessId;parent=$_.ParentProcessId;identity=$_.CreationDate.ToUniversalTime().ToString('o')} } | ConvertTo-Json -Compress`;
-  const output = execFileSync(path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), [
-    "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")
-  ], { encoding: "utf8", windowsHide: true, timeout: 10000 });
-  return JSON.parse(output);
-}
 
 function fixture(t, { unavailable = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-nonreview-launch-"));

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs, windowsProcesses } from "./lib/fake-claude.mjs";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 
 test("native mock forwards arbitrary argv and stdin without a shell", t => {
@@ -12,7 +12,7 @@ test("native mock forwards arbitrary argv and stdin without a shell", t => {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const executable = path.join(root, fakeClaudeName);
   writeFakeClaude(executable, `#!/usr/bin/env node\nconst fs=require('node:fs'); console.log(JSON.stringify({argv:process.argv.slice(2),stdin:fs.readFileSync(0).toString('base64')}));`);
-  const args = ["-p", "quoted \"value\"", "trailing\\", "$(never execute); & | % !", "日本語"];
+  const args = ["-p", "--list-processes", "--acl", "quoted \"value\"", "trailing\\", "$(never execute); & | % !", "日本語"];
   const input = Buffer.from("Private synthetic stdin\r\n\u0000", "utf8");
   const result = spawnSync(executable, args, { input, env: isolatedClaudeEnv(root, executable), encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
@@ -52,4 +52,14 @@ fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify(child.pid));console.l
   assert.equal(result.stdout.trim(), "PASS");
   const pid = JSON.parse(fs.readFileSync(pidFile, "utf8"));
   assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+});
+
+test("native Windows process inspection retains parent and stable creation identity", t => {
+  if (process.platform !== "win32") { t.skip("Requires Windows process snapshot"); return; }
+  const first = windowsProcesses().find(process => process.pid === globalThis.process.pid);
+  const second = windowsProcesses().find(process => process.pid === globalThis.process.pid);
+  assert.ok(first && second);
+  assert.equal(first.parent, process.ppid);
+  assert.equal(first.identity, second.identity);
+  assert.match(first.identity, /^\d{4}-\d{2}-\d{2}T/);
 });

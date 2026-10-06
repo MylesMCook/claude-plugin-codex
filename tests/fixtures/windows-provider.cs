@@ -6,6 +6,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 class MockProvider {
   [StructLayout(LayoutKind.Sequential)] struct BasicLimits {
@@ -28,6 +30,57 @@ class MockProvider {
   [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits limits, int size);
   [DllImport("kernel32.dll", SetLastError = true)] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct ProcessEntry {
+    public uint Size, Usage, Pid;
+    public UIntPtr Heap;
+    public uint Module, Threads, Parent;
+    public int Priority;
+    public uint Flags;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name;
+  }
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
+
+  static void ListProcesses() {
+    IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+    if (snapshot == new IntPtr(-1)) throw new InvalidOperationException();
+    var output = new StringBuilder("[");
+    var entry = new ProcessEntry(); entry.Size = (uint)Marshal.SizeOf(entry);
+    try {
+      if (!Process32FirstW(snapshot, ref entry)) throw new InvalidOperationException();
+      do {
+        try {
+          using (var process = Process.GetProcessById((int)entry.Pid)) {
+            string identity = process.StartTime.ToUniversalTime().ToString("o");
+            if (output.Length > 1) output.Append(",");
+            output.Append("{\"pid\":").Append(entry.Pid).Append(",\"parent\":").Append(entry.Parent)
+              .Append(",\"identity\":\"").Append(identity).Append("\"}");
+          }
+        } catch (System.ComponentModel.Win32Exception) {}
+          catch (InvalidOperationException) {} catch (ArgumentException) {}
+      } while (Process32NextW(snapshot, ref entry));
+      Console.WriteLine(output.Append("]"));
+    } finally { CloseHandle(snapshot); }
+  }
+
+  static void ReadAcl(string target) {
+    FileSystemSecurity acl = Directory.Exists(target)
+      ? (FileSystemSecurity)Directory.GetAccessControl(target, AccessControlSections.Access | AccessControlSections.Owner)
+      : File.GetAccessControl(target, AccessControlSections.Access | AccessControlSections.Owner);
+    var output = new StringBuilder("{\"protected\":").Append(acl.AreAccessRulesProtected ? "true" : "false")
+      .Append(",\"user\":\"").Append(WindowsIdentity.GetCurrent().User.Value)
+      .Append("\",\"owner\":\"").Append(acl.GetOwner(typeof(SecurityIdentifier)).Value).Append("\",\"entries\":[");
+    foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier))) {
+      if (output[output.Length - 1] != '[') output.Append(",");
+      output.Append("{\"sid\":\"").Append(rule.IdentityReference.Value).Append("\",\"allow\":")
+        .Append(rule.AccessControlType == AccessControlType.Allow ? "true" : "false")
+        .Append(",\"rights\":").Append((int)rule.FileSystemRights)
+        .Append(",\"inheritance\":").Append((int)rule.InheritanceFlags)
+        .Append(",\"propagation\":").Append((int)rule.PropagationFlags).Append("}");
+    }
+    Console.WriteLine(output.Append("]}"));
+  }
 
   static string Quote(string value) {
     var output = new StringBuilder("\"");
@@ -46,6 +99,12 @@ class MockProvider {
     IntPtr job = IntPtr.Zero;
     Process child = null;
     try {
+      // The pristine utility binary has no provider config. Copied providers
+      // always forward arbitrary arguments, including these utility flag names.
+      if (!File.Exists(Assembly.GetExecutingAssembly().Location + ".mock")) {
+        if (args.Length == 1 && args[0] == "--list-processes") { ListProcesses(); return 0; }
+        if (args.Length == 2 && args[0] == "--acl") { ReadAcl(args[1]); return 0; }
+      }
       string[] config = File.ReadAllLines(Assembly.GetExecutingAssembly().Location + ".mock");
       if (config.Length != 2 || !File.Exists(config[0]) || !File.Exists(config[1])) return 91;
       // No fixture code runs before job assignment. The launcher supplies the
