@@ -43,6 +43,7 @@ class MockProvider {
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
 
   static void ListProcesses() {
+    DateTime cutoff = DateTime.UtcNow;
     IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
     if (snapshot == new IntPtr(-1)) throw new InvalidOperationException();
     var output = new StringBuilder("[");
@@ -52,7 +53,10 @@ class MockProvider {
       do {
         try {
           using (var process = Process.GetProcessById((int)entry.Pid)) {
-            string identity = process.StartTime.ToUniversalTime().ToString("o");
+            DateTime started = process.StartTime.ToUniversalTime();
+            // Never pair a stale snapshot parent with a reused PID's identity.
+            if (started > cutoff) continue;
+            string identity = started.ToString("o");
             if (output.Length > 1) output.Append(",");
             output.Append("{\"pid\":").Append(entry.Pid).Append(",\"parent\":").Append(entry.Parent)
               .Append(",\"identity\":\"").Append(identity).Append("\"}");
