@@ -4,8 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
-import { restrictPrivatePath, hasPrivateWindowsAcl } from "../plugins/claude-code-advisor/scripts/lib/private-path.mjs";
+import { restrictPrivatePath, hasPrivateWindowsAcl, parseWindowsUserSid } from "../plugins/claude-code-advisor/scripts/lib/private-path.mjs";
 import { assertPrivatePermissions, createRedirect } from "./lib/permissions.mjs";
+
+test("Windows identity comes from the SID column rather than a SID-shaped username", () => {
+  const sid = "S-1-5-21-1-2-3-500";
+  assert.equal(parseWindowsUserSid(`"DOMAIN\\S-1-1-0","${sid}"\r\n`), sid);
+  assert.equal(parseWindowsUserSid('"DOMAIN\\S-1-1-0","invalid"'), null);
+});
 
 test("Windows private ACL verification rejects extra, conditional and incomplete grants", () => {
   const sid = "S-1-5-21-1-2-3-1001";

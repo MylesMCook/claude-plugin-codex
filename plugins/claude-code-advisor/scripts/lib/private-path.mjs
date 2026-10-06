@@ -4,6 +4,9 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 let userSid;
+export function parseWindowsUserSid(csv) {
+  return String(csv || "").match(/,"(S-1-\d+(?:-\d+)+)"\s*$/)?.[1] || null;
+}
 export function hasPrivateWindowsAcl(dacl, sid, directory, verifiedAlias = null) {
   if (!dacl || !/^D:P/.test(dacl)) return false;
   const matches = [...dacl.matchAll(/\(([^()]+)\)/g)];
@@ -40,7 +43,7 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
   let stage = "identity";
   try {
     if (!userSid) {
-      userSid = run("whoami.exe", ["/user", "/fo", "csv", "/nh"]).match(/S-1-\d+(?:-\d+)+/)?.[0];
+      userSid = parseWindowsUserSid(run("whoami.exe", ["/user", "/fo", "csv", "/nh"]));
       if (!userSid) throw new Error("User SID unavailable.");
     }
     if (newFile && (!stat.isFile() || stat.nlink !== 1)) throw new Error("Not a newly created private file.");
