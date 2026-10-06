@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { discoverClaude } from "../plugins/claude-code-advisor/scripts/lib/local-cli.mjs";
 
 import {
   isCanonicalResumeReference,
@@ -175,7 +176,8 @@ function cleanupActiveJobs(context) {
   return allCleanupVerified(context);
 }
 
-const versionOutput = requireSuccess(run("claude", ["--version"]), "capability-unavailable");
+const claudeExecutable = discoverClaude();
+const versionOutput = requireSuccess(run(claudeExecutable, ["--version"]), "capability-unavailable");
 const version = versionOutput.match(/\b\d+\.\d+\.\d+\b/)?.[0];
 expect(version, "capability-unavailable");
 console.log(`Claude Code ${version}`);
@@ -185,7 +187,7 @@ if (process.env.CLAUDE_PLUGIN_CODEX_RUN_BG_SMOKE !== "1") {
   process.exit(0);
 }
 
-const help = requireSuccess(run("claude", ["--help"]), "capability-unavailable");
+const help = requireSuccess(run(claudeExecutable, ["--help"]), "capability-unavailable");
 for (const required of ["--print", "--output-format", "--resume", "--mcp-config", "--strict-mcp-config", "--no-chrome"]) {
   expect(help.includes(required), "capability-unavailable");
 }
@@ -210,7 +212,7 @@ try {
 
   const firstNonce = randomUUID();
   const firstLaunch = launchBackground(context, [
-    "advise", "--model", "sonnet", "--effort", "low", "--max-turns", "3",
+    "advise", "--effort", "xhigh", "--max-turns", "3",
     "--timeout-ms", String(backgroundDeadlineMs),
     `Reply with exactly ${firstNonce}. Do not inspect or modify files.`
   ]);
@@ -222,7 +224,7 @@ try {
 
   const secondNonce = randomUUID();
   const foreground = companionJson(context, [
-    "rescue", "--resume", "--job-id", firstJob.id, "--model", "sonnet", "--effort", "low",
+    "rescue", "--resume", "--job-id", firstJob.id, "--effort", "xhigh",
     "--output-format", "json", "--no-background-fallback", "--timeout-ms", String(foregroundTimeoutMs),
     `Reply with exactly ${secondNonce}. Do not inspect or modify files.`
   ], { timeout: foregroundTimeoutMs + commandTimeoutMs, classification: "authentication-unavailable" });
@@ -233,7 +235,7 @@ try {
 
   const thirdNonce = randomUUID();
   const resumedLaunch = launchBackground(context, [
-    "rescue", "--resume", "--job-id", foreground.jobId, "--model", "sonnet", "--effort", "low",
+    "rescue", "--resume", "--job-id", foreground.jobId, "--effort", "xhigh",
     "--max-turns", "3", "--timeout-ms", String(backgroundDeadlineMs),
     `Reply with exactly ${thirdNonce}. Do not inspect or modify files.`
   ]);

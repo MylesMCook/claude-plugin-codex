@@ -7,7 +7,7 @@ import {
 } from "./lib/release-version.mjs";
 
 const currentReleaseLine = (labelVersion, tagVersion = labelVersion) =>
-  `Current public release: [\`v${labelVersion}\`](https://github.com/BoldNewMedia/claude-plugin-codex/releases/tag/v${tagVersion}).`;
+  `Current public release: [\`v${labelVersion}\`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v${tagVersion}).`;
 
 test("extracts one canonical documented current release", () => {
   assert.equal(extractDocumentedCurrentRelease(currentReleaseLine("1.2.3")), "1.2.3");

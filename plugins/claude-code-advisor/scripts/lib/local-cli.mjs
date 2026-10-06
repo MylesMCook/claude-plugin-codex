@@ -27,6 +27,16 @@ export function discoverClaude({ env = process.env, platform = process.platform,
     const candidate = p.join(dir, name);
     if (valid(candidate)) return candidate;
   }
+  if (platform === "win32") {
+    // npm exposes a shell shim in PATH; launch its bundled native CLI directly.
+    const npmDirs = [...dirs];
+    if (env.APPDATA && p.isAbsolute(env.APPDATA)) npmDirs.push(p.join(env.APPDATA, "npm"));
+    npmDirs.push(p.join(home, "AppData", "Roaming", "npm"));
+    for (const dir of [...new Set(npmDirs)]) {
+      const candidate = p.join(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+      if (valid(candidate)) return candidate;
+    }
+  }
   throw new Error("Claude Code executable unavailable. Install the native CLI or set CLAUDE_COMPANION_EXECUTABLE; the Claude Desktop app alone is insufficient.");
 }
 

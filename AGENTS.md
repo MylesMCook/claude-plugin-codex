@@ -8,8 +8,9 @@ Codex remains the orchestrator.
 
 - Work only in this standalone repo.
 - Do not modify another checkout or repository for this project.
-- Treat `BoldNewMedia/claude-plugin-codex` as the release authority. Treat
-  `yanchuk/claude-plugin-codex` as a read-only upstream reference.
+- Publish this fork to `MylesMCook/claude-plugin-codex`. Treat
+  `BoldNewMedia/claude-plugin-codex` and `yanchuk/claude-plugin-codex` as
+  read-only upstream references.
 - Preserve the original MIT licence and Yanchuk attribution.
 - Do not commit or push unless the latest user instruction explicitly asks for
   it.

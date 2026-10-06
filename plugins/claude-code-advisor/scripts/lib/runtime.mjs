@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { TextDecoder } from "node:util";
+import { restrictPrivatePath } from "./private-path.mjs";
 
 export const STATE_VERSION = 1;
 export const DEFAULT_STATE_LOCK_TIMEOUT_MS = 5000;
@@ -259,7 +260,7 @@ function assertSafeManagedDirectory(directory, label = "state directory", pathBo
         }
       }
     }
-    fs.chmodSync(current, 0o700);
+    restrictPrivatePath(current, 0o700);
   }
 }
 
@@ -326,6 +327,7 @@ function readStateFile(stateFile) {
   if (!assertSafeRegularFile(stateFile, "state file")) {
     return emptyState();
   }
+  restrictPrivatePath(stateFile, 0o600);
   let text;
   try {
     const noFollow = fs.constants.O_NOFOLLOW || 0;
@@ -382,7 +384,12 @@ function acquireFileLock(lockFile, timeoutMs = DEFAULT_STATE_LOCK_TIMEOUT_MS) {
       } finally {
         fs.closeSync(fd);
       }
-      fs.chmodSync(lockFile, 0o600);
+      try {
+        restrictPrivatePath(lockFile, 0o600, { newFile: true });
+      } catch (error) {
+        releaseFileLock(lockFile, owner);
+        throw error;
+      }
       return owner;
     } catch (error) {
       if (error?.code !== "EEXIST") {
@@ -452,10 +459,10 @@ function atomicWritePrivateFile(file, content, options = {}) {
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;
+    restrictPrivatePath(tempFile, 0o600, { newFile: true });
     options.beforeRename?.({ file, tempFile });
     assertSafeRegularFile(file, basename);
     fs.renameSync(tempFile, file);
-    fs.chmodSync(file, 0o600);
     fsyncDirectory(directory);
   } finally {
     if (fd !== undefined) fs.closeSync(fd);

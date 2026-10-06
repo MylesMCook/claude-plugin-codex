@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import {
   resolveStateDir, saveState, STATE_VERSION, SUPERVISED_RECORD_VERSION, SUPERVISED_TRANSPORT
@@ -39,7 +40,7 @@ function fixture(t, response = {}) {
   fs.mkdirSync(bin);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"], { cwd: repo });
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env node
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.readFileSync(0);
@@ -55,6 +56,7 @@ else process.exit(response.exit || 0);
   fs.writeFileSync(guard, `const fs = require("node:fs");
 const cp = require("node:child_process");
 const net = require("node:net");
+const permissionTools = ${JSON.stringify(process.platform === "win32" ? [path.join(process.env.SystemRoot, "System32", "whoami.exe"), path.join(process.env.SystemRoot, "System32", "icacls.exe")] : [])};
 function reject(operation) {
   fs.appendFileSync(${JSON.stringify(executionLog)}, JSON.stringify(operation) + "\\n");
   throw new Error("Readback attempted provider or supervisor execution.");
@@ -62,7 +64,7 @@ function reject(operation) {
 for (const name of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"]) {
   const original = cp[name];
   cp[name] = function(command, ...args) {
-    if (command !== "git") reject(name);
+    if (command !== "git" && !permissionTools.includes(command)) reject(name);
     return original.call(this, command, ...args);
   };
 }
@@ -70,8 +72,8 @@ net.createConnection = net.connect = () => reject("socket");
 require("node:module").syncBuiltinESMExports();
 `);
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
-    CLAUDE_COMPANION_EXECUTABLE: path.join(bin, "claude"),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
+    CLAUDE_COMPANION_EXECUTABLE: path.join(bin, fakeClaudeName),
     CLAUDE_COMPANION_STATE_ROOT: path.join(root, "state"),
     CODEX_THREAD_ID: threadId
   };
@@ -80,7 +82,7 @@ require("node:module").syncBuiltinESMExports();
   const invoke = (args, { json = true, readback = true } = {}) => {
     const result = spawnSync(process.execPath, [
       ...(readback ? ["--require", guard] : []), companion, ...args, ...(json ? ["--json"] : [])
-    ], { cwd: repo, env, encoding: "utf8", timeout: 5000 });
+    ], { cwd: repo, env, encoding: "utf8", timeout: fixtureTimeoutMs });
     assert.equal(result.error, undefined, "readback must terminate within the test deadline");
     assert.equal(result.signal, null);
     return result;
@@ -186,11 +188,11 @@ for (const kind of ["review", "adversarial-review"]) {
     for (const [classification, response] of Object.entries({
       "command-failure": { exit: 7 },
       "invalid-result": {},
-      timeout: { delayMs: 4000 }
+      timeout: { delayMs: process.platform === "win32" ? 15000 : 4000 }
     })) {
       await t.test(classification, (t) => {
         const f = fixture(t, response);
-        const run = f.invoke([kind, "synthetic review", ...(classification === "timeout" ? ["--timeout-ms", "1000"] : [])], { readback: false });
+        const run = f.invoke([kind, "synthetic review", ...(classification === "timeout" ? ["--timeout-ms", process.platform === "win32" ? "5000" : "1000"] : [])], { readback: false });
         assert.equal(run.status, 1, run.stderr);
         assertRedacted(run);
         const published = JSON.parse(run.stdout);

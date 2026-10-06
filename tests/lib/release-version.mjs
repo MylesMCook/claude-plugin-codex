@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 const CURRENT_RELEASE_PATTERN =
-  /^Current public release: \[`v([^`\]\s]+)`\]\(https:\/\/github\.com\/BoldNewMedia\/claude-plugin-codex\/releases\/tag\/v([^\s)]+)\)\.$/;
+  /^Current public release: \[`v([^`\]\s]+)`\]\(https:\/\/github\.com\/MylesMCook\/claude-plugin-codex\/releases\/tag\/v([^\s)]+)\)\.$/;
 
 export function extractDocumentedCurrentRelease(readme) {
   const declarations = readme

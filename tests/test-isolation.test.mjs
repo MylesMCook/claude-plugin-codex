@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 import { discoverClaude } from "../plugins/claude-code-advisor/scripts/lib/local-cli.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-isolation-"));
@@ -28,16 +29,15 @@ test("a missing explicit mock cannot fall back to a usable host executable", t =
   assert.deepEqual(probes, [env.CLAUDE_COMPANION_EXECUTABLE]);
 });
 test("companion missing-mock failure never executes PATH or home fallback sentinel", t => {
-  if (process.platform === "win32") { t.skip("POSIX sentinel scripts; pure Windows fail-closed test runs above"); return; }
   const root = fixture(t);
   const env = isolatedClaudeEnv(root);
   const bin = path.join(root, "host-sentinel");
   const localBin = path.join(env.HOME, ".local", "bin");
   const called = path.join(root, "sentinel-called");
   fs.mkdirSync(bin); fs.mkdirSync(localBin, { recursive: true });
-  for (const dir of [bin, localBin]) fs.writeFileSync(path.join(dir, "claude"), `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(called)},'CALLED');`, { mode: 0o755 });
+  for (const dir of [bin, localBin]) writeFakeClaude(path.join(dir, fakeClaudeName), `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(called)},'CALLED');`);
   env.PATH = `${bin}${path.delimiter}${env.PATH}`;
-  const result = spawnSync(process.execPath, [path.resolve("plugins/claude-code-advisor/scripts/claude-companion.mjs"), "advise", "synthetic", "--json"], { cwd: root, env, encoding: "utf8", timeout: 5000 });
+  const result = spawnSync(process.execPath, [path.resolve("plugins/claude-code-advisor/scripts/claude-companion.mjs"), "advise", "synthetic", "--json"], { cwd: root, env, encoding: "utf8", timeout: fixtureTimeoutMs });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /CLAUDE_COMPANION_EXECUTABLE/);
   assert.equal(fs.existsSync(called), false);

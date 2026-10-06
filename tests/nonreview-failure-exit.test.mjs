@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
 
@@ -24,7 +25,7 @@ function fixture(t, { kind, resumed, write, outcome }) {
   const invocationLog = path.join(root, "invocations.jsonl");
   for (const directory of [repo, bin, home]) fs.mkdirSync(directory);
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     TMPDIR: root,
     GIT_CONFIG_NOSYSTEM: "1",
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
@@ -32,7 +33,7 @@ function fixture(t, { kind, resumed, write, outcome }) {
   };
   execFileSync("git", ["init", "-q"], { cwd: repo, env });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"], { cwd: repo, env });
-  fs.writeFileSync(path.join(bin, "claude"), `#!${process.execPath}
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!${process.execPath}
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(invocationLog)}, JSON.stringify({ args, stdin: fs.readFileSync(0, "utf8") }) + "\\n");
@@ -65,7 +66,7 @@ else fs.writeSync(1, ${JSON.stringify(successText)});
         companion, kind, "Synthetic task", "--no-background-fallback",
         ...(source ? ["--resume", "--job-id", source.id] : []),
         ...(write ? ["--write"] : []), ...(json ? ["--json"] : [])
-      ], { cwd: repo, env, encoding: "utf8", timeout: 10000 });
+      ], { cwd: repo, env, encoding: "utf8", timeout: fixtureTimeoutMs });
       assert.equal(result.error, undefined, "the command must terminate within the test deadline");
       assert.equal(result.signal, null);
       return result;

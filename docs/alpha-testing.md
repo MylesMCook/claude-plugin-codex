@@ -3,7 +3,7 @@
 The project remains alpha. People who already use both Codex and Claude Code
 may submit unsolicited reports at any time. Reporting is entirely optional.
 The current public release is
-[`v0.1.18`](https://github.com/BoldNewMedia/claude-plugin-codex/releases/tag/v0.1.18).
+[`v0.1.19`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.19).
 
 See the GitHub release notes for exact-commit checks, authenticated execution
 and installed Codex routing evidence. Deterministic tests alone do not establish
@@ -28,7 +28,7 @@ does not establish native Windows compatibility.
 
 ## Optional 15–20-minute check
 
-1. Install `v0.1.18` using the marketplace and plugin commands in the
+1. Install `v0.1.19` using the marketplace and plugin commands in the
    [README](../README.md).
 2. Start a new Codex task.
 3. Run `$claude setup`.
@@ -36,7 +36,7 @@ does not establish native Windows compatibility.
    small tracked or staged change and no untracked files, run one foreground
    `$claude review`.
 5. If you choose to report, submit the
-   [structured alpha test report](https://github.com/BoldNewMedia/claude-plugin-codex/issues/new?template=alpha_test_report.yml),
+   [structured alpha test report](https://github.com/MylesMCook/claude-plugin-codex/issues/new?template=alpha_test_report.yml),
    whether the result passed, failed or was inconclusive.
 
 Use the foreground review route for comparable cross-platform evidence.

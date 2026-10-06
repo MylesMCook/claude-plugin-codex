@@ -28,7 +28,7 @@ jobs:
       - run: node tests/validate-plugin.mjs
 
   ux-portability:
-    name: UX discovery on ${{ matrix.os }}
+    name: Full validation on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -40,4 +40,4 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
-      - run: node --test tests/ux-advisor.test.mjs tests/test-isolation.test.mjs
+      - run: npm run validate

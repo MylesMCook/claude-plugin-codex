@@ -1,7 +1,7 @@
 # Claude Code Advisor for Codex
 
-[![CI](https://github.com/BoldNewMedia/claude-plugin-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/BoldNewMedia/claude-plugin-codex/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/BoldNewMedia/claude-plugin-codex)](https://github.com/BoldNewMedia/claude-plugin-codex/releases)
+[![CI](https://github.com/MylesMCook/claude-plugin-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/MylesMCook/claude-plugin-codex/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/MylesMCook/claude-plugin-codex)](https://github.com/MylesMCook/claude-plugin-codex/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Catch hidden assumptions in Codex changes with a read-only Claude Code review,
@@ -13,32 +13,25 @@ Claude Code installation supplies the second opinion.
 This is an unofficial, community-maintained integration. It is not endorsed by
 or affiliated with OpenAI or Anthropic.
 
-Maintained by [Bold New Media](https://github.com/BoldNewMedia). From v0.1.13,
-releases come from this maintained fork of the original
-[`yanchuk/claude-plugin-codex`](https://github.com/yanchuk/claude-plugin-codex)
-project. The project retains its MIT licence and original attribution.
+This maintained fork is published by [Myles Cook](https://github.com/MylesMCook).
+It builds on [Bold New Media](https://github.com/BoldNewMedia/claude-plugin-codex)
+and the original [Yanchuk project](https://github.com/yanchuk/claude-plugin-codex).
+The MIT licence and upstream attribution are retained.
 
 ## Install
 
-For the UX advisor build in this fork:
+Install this fork:
 
 ```bash
 codex plugin marketplace add MylesMCook/claude-plugin-codex
 codex plugin add claude-code-advisor@claude-plugin-codex
 ```
 
-The manifest retains the upstream version; identify this build by its fork Git
-commit. Start a new Codex thread after installation to load the updated skill.
+This fork publishes version 0.1.19. Start a new Codex thread after installation
+to load the updated skill.
 Use `$claude ux --billing-source subscription <question>` after approving the
 exact context to send. Install Anthropic's official `frontend-design` Claude
 plugin separately. Codex implements the advice and remains the primary agent.
-
-Add the public marketplace and install the plugin:
-
-```bash
-codex plugin marketplace add BoldNewMedia/claude-plugin-codex
-codex plugin add claude-code-advisor@claude-plugin-codex
-```
 
 Alternatively, after adding the marketplace, open Codex's plugin directory,
 find **Claude Code Advisor for Codex**, and install **Claude Code Advisor**.
@@ -91,7 +84,7 @@ Alpha. Use it on real work only with normal review and source-control controls.
 The stable command form is `$claude`. If your Codex UI exposes the skill as
 `/claude`, you can use that as an alias.
 
-Current public release: [`v0.1.18`](https://github.com/BoldNewMedia/claude-plugin-codex/releases/tag/v0.1.18).
+Current public release: [`v0.1.19`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.19).
 
 | Component | Verification scope |
 |---|---|
@@ -101,18 +94,19 @@ Current public release: [`v0.1.18`](https://github.com/BoldNewMedia/claude-plugi
 | macOS | Deterministic coverage and supervised background support exist; maintainer checks are separate from independent reports |
 | Linux | CI and deterministic coverage exist; authenticated foreground use has not been independently verified |
 | WSL | Not yet independently verified; recorded separately from native Windows |
-| Native Windows | Not yet independently verified; supervised background mode is unavailable |
+| Native Windows | Full synthetic validation and authenticated installed setup/advice pass; supervised background mode is unavailable |
 
 See the GitHub release notes for exact-commit checks, authenticated execution
 and installed Codex routing evidence. Deterministic tests alone do not establish
 authenticated use. The routing test may report unavailable authentication in its
 nested sandbox; that outcome verifies routing only. Independent platform
-evidence remains incomplete, especially for WSL and native Windows.
+evidence remains incomplete for WSL. See [platform verification](docs/windows-verification.md)
+for this fork's full Windows run and authenticated Mac routing.
 
 If you already use Codex and authenticated Claude Code and choose to test
-`v0.1.18`, run `$claude setup` and one foreground `$claude review` in a public,
+`v0.1.19`, run `$claude setup` and one foreground `$claude review` in a public,
 disposable or otherwise non-sensitive repository. You may then submit an
-[optional structured alpha test report](https://github.com/BoldNewMedia/claude-plugin-codex/issues/new?template=alpha_test_report.yml).
+[optional structured alpha test report](https://github.com/MylesMCook/claude-plugin-codex/issues/new?template=alpha_test_report.yml).
 See the [alpha testing guide](docs/alpha-testing.md) for the optional check and
 reporting safety guidance.
 
@@ -435,7 +429,7 @@ npm run test:e2e:codex
 
 This requires `codex plugin marketplace add ./` and **Claude Code Advisor**
 installed from Codex's plugin directory. It starts a fresh `codex exec` session
-and verifies that setup and `$claude advise --model sonnet` route through the
+and verifies that setup and `$claude advise --effort xhigh` route through the
 same installed skill. The test uses Codex's `workspace-write` sandbox with
 approvals disabled and foreground advice with no background fallback.
 
@@ -446,8 +440,17 @@ An exact `PASS` response verifies authenticated advice. If setup independently
 reports unavailable authentication and the saved advice job confirms the failure,
 the test reports authentication unavailability and verifies routing only. A
 generic Claude failure alone does not pass. The separate opt-in smoke above
-verifies the authenticated background contract. Sonnet is used only for this
-small routing test.
+verifies the authenticated background contract. This routing test uses the
+configured default Claude model.
+
+To require an authenticated response under your existing host permissions:
+
+```bash
+node tests/e2e-codex-skill.mjs --host-permissions
+```
+
+This explicit gate inherits the current host profile and fails if Claude cannot
+authenticate. It does not change permissions or configuration.
 
 ## Current Limits
 

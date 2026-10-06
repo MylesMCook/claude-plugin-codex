@@ -1,3 +1,4 @@
+import { assertPrivatePermissions, createRedirect } from "./lib/permissions.mjs";
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -115,7 +116,7 @@ function routedFixture(t, { authenticated = false, legacy = false } = {}) {
   const events = [
     { type: "item.completed", item: { type: "command_execution", command: `node '${launcher}' setup --json`, exit_code: 0 } },
     { type: "item.completed", item: {
-      type: "command_execution", command: `node '${launcher}' advise --model sonnet --max-turns 1 --timeout-ms 120000 --no-background-fallback --effort xhigh 'Return exactly PASS.'`, exit_code: authenticated || legacy ? 0 : 1,
+      type: "command_execution", command: `node '${launcher}' advise --max-turns 1 --timeout-ms 120000 --no-background-fallback --effort xhigh 'Return exactly PASS.'`, exit_code: authenticated || legacy ? 0 : 1,
       aggregated_output: authenticated ? "PASS\n" : `Claude job ${job.id} failed.\n${job.result}\n`
     } }
   ];
@@ -162,6 +163,30 @@ test("Codex routing accepts one recorded execution shell around bounded direct c
   }
 });
 
+test("Codex routing accepts bounded Windows node commands and one PowerShell wrapper", t => {
+  for (const shell of [null, "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"]) {
+    const fixture = routedFixture(t, { authenticated: true });
+    const launcher = "C:\\Users\\Test User\\claude-code-advisor\\0.1.18\\scripts\\claude-companion.mjs";
+    for (const event of fixture.events) {
+      const suffix = event.item.command.slice(event.item.command.indexOf("' ") + 2);
+      const command = `& 'C:\\Program Files\\nodejs\\node.exe' '${launcher}' ${suffix}`;
+      event.item.command = shell ? `'${shell}' -NoProfile -Command '${command.replaceAll("'", "''")}'` : command;
+    }
+    assert.equal(fixture.run(), "authenticated");
+  }
+});
+
+test("Codex routing decodes native Windows quoting before parsing the PowerShell script", t => {
+  const fixture = routedFixture(t, { authenticated: true });
+  const launcher = "C:\\Users\\Test User\\claude-code-advisor\\0.1.18\\scripts\\claude-companion.mjs";
+  for (const event of fixture.events) {
+    const suffix = event.item.command.slice(event.item.command.indexOf("' ") + 2);
+    const command = `& "C:\\Program Files\\nodejs\\node.exe" "${launcher}" ${suffix}`;
+    event.item.command = `"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoProfile -Command "${command.replaceAll('"', '\\"')}"`;
+  }
+  assert.equal(fixture.run(), "authenticated");
+});
+
 test("Codex routing rejects malformed, failed and contradictory setup evidence", (t) => {
   const changes = [
     (f) => { f.events[0].item.exit_code = 1; },
@@ -204,6 +229,8 @@ test("Codex routing rejects malformed, failed and contradictory setup evidence",
 test("Codex routing requires bounded commands and preserves live or ambiguous state", (t) => {
   const changes = [
     (f) => { f.events[1].item.command = f.events[1].item.command.replace("--no-background-fallback", ""); },
+    (f) => { f.events[1].item.command += " --model sonnet"; },
+    (f) => { f.events[1].item.command = f.events[1].item.command.replace("--effort xhigh", "--effort low"); },
     ...["--background", "--write", "--allow-web", "--allow-mcp"].map((flag) => (f) => { f.events[1].item.command += ` ${flag}`; }),
     (f) => { f.events[1].item.command = `env OTHER=value ${f.events[1].item.command}`; },
     (f) => { f.events[1].item.command = `cd /tmp && ${f.events[1].item.command}`; },
@@ -715,8 +742,44 @@ test("saveState restricts state directory and file permissions", () => {
 
   saveState(stateDir, { version: 1, jobs: [], capabilities: null });
 
-  assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(path.join(stateDir, "state.json")).mode & 0o777, 0o600);
+  assertPrivatePermissions(stateDir, 0o700);
+  assertPrivatePermissions(path.join(stateDir, "state.json"), 0o600);
+});
+
+test("loadState protects an existing broadly readable state file before returning it", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-legacy-permissions-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stateDir = path.join(root, "state");
+  saveState(stateDir, emptyState());
+  const file = path.join(stateDir, "state.json");
+  if (process.platform === "win32") {
+    const result = spawnSync(path.join(process.env.SystemRoot, "System32", "icacls.exe"), [file, "/grant", "*S-1-1-0:R", "/q"]);
+    assert.equal(result.status, 0, result.stderr?.toString());
+  } else fs.chmodSync(file, 0o644);
+  assert.deepEqual(loadState(stateDir), emptyState());
+  assertPrivatePermissions(file, 0o600);
+});
+
+test("a failed lock permission check releases only its own newly created lock", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-lock-permissions-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stateDir = path.join(root, "state");
+  saveState(stateDir, emptyState());
+  const lockFile = path.join(stateDir, ".state.lock");
+  const original = fs.lstatSync;
+  let injected = false;
+  fs.lstatSync = function (target, ...args) {
+    if (target === lockFile && !injected) {
+      injected = true;
+      throw Object.assign(new Error("simulated lock permission failure"), { code: "EACCES" });
+    }
+    return original.call(this, target, ...args);
+  };
+  try {
+    assert.throws(() => transactState(stateDir, state => state), /simulated lock permission failure/);
+  } finally { fs.lstatSync = original; }
+  assert.equal(fs.existsSync(lockFile), false, "failed acquisition must not strand its owned lock");
+  assert.doesNotThrow(() => transactState(stateDir, state => state, { lockTimeoutMs: 20 }));
 });
 
 test("transactState reloads under lock so concurrent child-process inserts and updates are not lost", async () => {
@@ -760,7 +823,7 @@ test("an interrupted pre-rename state write preserves the last valid state and c
     () => saveState(
       stateDir,
       { ...emptyState(), jobs: [{ id: "lost", status: "completed" }] },
-      { beforeRename: () => { throw new Error("simulated interruption"); } }
+      { beforeRename: ({ tempFile }) => { assertPrivatePermissions(tempFile, 0o600); throw new Error("simulated interruption"); } }
     ),
     /simulated interruption/
   );
@@ -864,7 +927,7 @@ test("state, lock and managed-directory symlinks are refused without changing th
     const target = path.join(root, "target.json");
     const evidence = `${JSON.stringify({ version: 1, jobs: [{ id: "evidence" }], capabilities: null })}\n`;
     fs.writeFileSync(target, evidence, { encoding: "utf8", mode: 0o600 });
-    fs.symlinkSync(target, path.join(stateDir, "state.json"));
+    createRedirect(target, path.join(stateDir, "state.json"));
 
     assert.throws(() => loadState(stateDir), /unsafe state file.*not a symlink/);
     assert.equal(fs.readFileSync(target, "utf8"), evidence);
@@ -876,7 +939,7 @@ test("state, lock and managed-directory symlinks are refused without changing th
     loadState(stateDir);
     const target = path.join(root, "lock-target");
     fs.writeFileSync(target, "sentinel\n", { encoding: "utf8", mode: 0o600 });
-    fs.symlinkSync(target, path.join(stateDir, ".state.lock"));
+    createRedirect(target, path.join(stateDir, ".state.lock"));
 
     assert.throws(() => transactState(stateDir, (state) => state, { lockTimeoutMs: 20 }), /unsafe state lock/);
     assert.equal(fs.readFileSync(target, "utf8"), "sentinel\n");
@@ -889,7 +952,7 @@ test("state, lock and managed-directory symlinks are refused without changing th
     fs.mkdirSync(parent, { mode: 0o700 });
     fs.mkdirSync(target, { mode: 0o700 });
     const stateDir = path.join(parent, "thread");
-    fs.symlinkSync(target, stateDir, "dir");
+    createRedirect(target, stateDir, "dir");
 
     assert.throws(() => loadState(stateDir), /unsafe state directory/);
     assert.deepEqual(fs.readdirSync(target), []);
@@ -903,7 +966,7 @@ test("an ancestor symlink inside an explicit state path boundary is refused", ()
   fs.mkdirSync(boundary, { mode: 0o700 });
   fs.mkdirSync(target, { mode: 0o700 });
   fs.writeFileSync(path.join(target, "sentinel"), "unchanged\n", { encoding: "utf8", mode: 0o600 });
-  fs.symlinkSync(target, path.join(boundary, "redirect"), "dir");
+  createRedirect(target, path.join(boundary, "redirect"), "dir");
   const stateDir = path.join(boundary, "redirect", "thread");
 
   assert.throws(
@@ -929,8 +992,8 @@ test("latest-state-dir updates are atomic, private and leave the prior pointer o
 
   assert.deepEqual(fs.readFileSync(latestFile), before);
   assert.equal(fs.readFileSync(latestFile, "utf8"), `${first}\n`);
-  assert.equal(fs.statSync(indexDir).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(latestFile).mode & 0o777, 0o600);
+  assertPrivatePermissions(indexDir, 0o700);
+  assertPrivatePermissions(latestFile, 0o600);
   assert.deepEqual(fs.readdirSync(indexDir).filter((name) => name.endsWith(".tmp")), []);
   assert.equal(fs.existsSync(path.join(indexDir, ".latest-state-dir.lock")), false);
 });
@@ -966,7 +1029,7 @@ test("latest-state-dir symlinks are refused without changing their targets", () 
   fs.mkdirSync(indexDir, { mode: 0o700 });
   const target = path.join(root, "target-pointer");
   fs.writeFileSync(target, "sentinel\n", { encoding: "utf8", mode: 0o600 });
-  fs.symlinkSync(target, path.join(indexDir, "latest-state-dir"));
+  createRedirect(target, path.join(indexDir, "latest-state-dir"));
 
   assert.throws(() => updateLatestStateDir(indexDir, "/safe/state"), /unsafe latest-state-dir/);
   assert.equal(fs.readFileSync(target, "utf8"), "sentinel\n");

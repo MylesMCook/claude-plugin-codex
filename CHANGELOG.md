@@ -2,6 +2,21 @@
 
 All notable public changes to Claude Code Advisor for Codex are recorded here.
 
+## 0.1.19 - 2026-10-06
+
+- discover the native Claude executable bundled by Windows npm installations,
+  preserving explicit overrides and native PATH precedence without shell shims
+- protect Windows state paths and existing files with verified private ACLs;
+  protect temporary files before publication and release owned locks on ACL failure
+- reject inherit-only ACLs and normalize ownership of managed state paths
+- keep non-macOS timeouts from attempting unsupported background fallback
+- run native Windows fixtures with exact argv/stdin forwarding and owned descendant
+  cleanup; run full validation on Windows, macOS and Linux in CI
+- preserve configured Claude model selection and add an explicit authenticated
+  host-permissions routing gate alongside restricted-sandbox denial coverage
+- publish this maintained fork with its own version and repository links,
+  retaining upstream MIT notices and attribution
+
 ## 0.1.18 - 2026-09-06
 
 - keep default structured reviews out of interactive Plan Mode, which can cause

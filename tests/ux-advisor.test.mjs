@@ -1,5 +1,6 @@
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude } from "./lib/fake-claude.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,6 +28,58 @@ test("explicit executable fails closed and Windows rejects shell shims", () => {
   for (const candidate of ["claude", "C:\\bin\\claude.cmd", "C:\\bin\\claude.bat"]) assert.throws(() => discoverClaude({ platform: "win32", env: { CLAUDE_COMPANION_EXECUTABLE: candidate }, usable: () => true }));
   assert.throws(() => discoverClaude({ platform: "darwin", env: { CLAUDE_COMPANION_EXECUTABLE: "/missing" }, usable: () => false }));
   assert.equal(discoverClaude({ platform: "win32", env: { CLAUDE_COMPANION_EXECUTABLE: "C:\\Tools With Spaces\\claude.exe" }, usable: () => true }), "C:\\Tools With Spaces\\claude.exe");
+});
+
+test("Windows npm installs resolve the bundled native CLI without running a shim", () => {
+  const home = "C:\\Users\\Test User";
+  const appData = "C:\\Users\\Test User\\AppData\\Roaming";
+  const suffix = "node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe";
+  for (const [env, prefix] of [
+    [{ Path: `${appData}\\npm`, APPDATA: appData }, `${appData}\\npm`],
+    [{ PATH: "D:\\Custom npm prefix" }, "D:\\Custom npm prefix"],
+    [{ PATH: "C:\\Windows", APPDATA: "D:\\Roaming With Spaces" }, "D:\\Roaming With Spaces\\npm"],
+    [{ PATH: "C:\\Windows" }, `${appData}\\npm`]
+  ]) {
+    const expected = `${prefix}\\${suffix}`;
+    const checked = [];
+    assert.equal(discoverClaude({ platform: "win32", home, env, usable: candidate => {
+      checked.push(candidate);
+      return candidate === expected || candidate === `${prefix}\\claude.cmd` || candidate === `${prefix}\\claude.ps1`;
+    } }), expected);
+    assert.ok(checked.includes(expected));
+  }
+});
+
+test("Windows npm fallback preserves native PATH priority and ignores relative APPDATA", () => {
+  const expected = "C:\\Native\\claude.exe";
+  assert.equal(discoverClaude({ platform: "win32", home: "C:\\Users\\Test", env: {
+    PATH: "C:\\npm;C:\\Native"
+  }, usable: candidate => candidate === expected || candidate.includes("node_modules") }), expected);
+  const home = "C:\\Users\\Test";
+  assert.equal(discoverClaude({ platform: "win32", home, env: {
+    PATH: "C:\\npm"
+  }, usable: candidate => candidate.endsWith(".local\\bin\\claude.exe") || candidate.includes("node_modules") }), `${home}\\.local\\bin\\claude.exe`);
+  assert.equal(discoverClaude({ platform: "win32", home, env: {
+    PATH: "C:\\npm", CLAUDE_COMPANION_EXECUTABLE: expected
+  }, usable: () => true }), expected);
+  const checked = [];
+  assert.throws(() => discoverClaude({ platform: "win32", home: "C:\\Users\\Test", env: {
+    PATH: ".;relative", APPDATA: "relative"
+  }, usable: candidate => { checked.push(candidate); return false; } }));
+  assert.ok(checked.includes(`${home}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe`));
+});
+
+test("Windows npm discovery checks actual files and ignores a directory named claude.exe", t => {
+  if (process.platform !== "win32") { t.skip("Requires Windows filesystem paths"); return; }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude npm discovery "));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const prefix = path.join(root, "npm");
+  const expected = path.join(prefix, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+  fs.mkdirSync(path.dirname(expected), { recursive: true });
+  fs.mkdirSync(path.join(prefix, "claude.exe"));
+  for (const shim of ["claude.cmd", "claude.ps1"]) fs.writeFileSync(path.join(prefix, shim), "Must never execute");
+  fs.writeFileSync(expected, "Discovery fixture; never executed");
+  assert.equal(discoverClaude({ platform: "win32", home: root, env: { Path: prefix } }), expected);
 });
 test("auth projection is fixed, fail-closed and respects API/provider overrides", () => {
   const result = { status: 0, stdout: JSON.stringify({ loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", email: "PRIVATE", token: "SECRET" }) };
@@ -56,16 +109,15 @@ test("UX policy is bounded, foreground and read-only with explicit skill request
 function fixture(t, auth, slow = false) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ux-synthetic-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const cli = path.join(root, "claude");
+  const cli = path.join(root, fakeClaudeName);
   const log = path.join(root, "calls.jsonl");
-  fs.writeFileSync(cli, `#!${process.execPath}\nconst fs=require('fs'); const args=process.argv.slice(2); fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n'); if(args[0]==='auth'){console.log(${JSON.stringify(JSON.stringify(auth))});process.exit(0);} ${slow ? "process.on('SIGTERM',()=>{});setTimeout(()=>console.log('late'),10000);" : "let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>console.log('SYNTHETIC UX'));"}`);
+  writeFakeClaude(cli, `#!${process.execPath}\nconst fs=require('fs'); const args=process.argv.slice(2); fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n'); if(args[0]==='auth'){console.log(${JSON.stringify(JSON.stringify(auth))});process.exit(0);} ${slow ? "process.on('SIGTERM',()=>{});setTimeout(()=>console.log('late'),10000);" : "let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>console.log('SYNTHETIC UX'));"}`);
   fs.chmodSync(cli, 0o755);
   const companion = path.resolve("plugins/claude-code-advisor/scripts/claude-companion.mjs");
   const run = args => spawnSync(process.execPath, [companion, "ux", ...args, "Navigation question", "--json"], { cwd: root, encoding: "utf8", timeout: 15000, env: isolatedClaudeEnv(root, cli) });
   return { run, calls: () => fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split('\n').map(JSON.parse) : [] };
 }
 test("synthetic UX invocation preflights billing before the single advice call", t => {
-  if (process.platform === "win32") { t.skip("POSIX fake executable; native Windows invocation remains unverified"); return; }
   const f = fixture(t, { loggedIn: true, authMethod: "claude.ai", subscriptionType: "max" });
   const result = f.run(["--billing-source", "subscription"]);
   assert.equal(result.status, 0, result.stderr);
@@ -74,7 +126,6 @@ test("synthetic UX invocation preflights billing before the single advice call",
   assert.equal(f.calls().length, 2);
 });
 test("billing mismatch never sends a prompt", t => {
-  if (process.platform === "win32") { t.skip("POSIX fake executable; native Windows invocation remains unverified"); return; }
   const f = fixture(t, { loggedIn: true, authMethod: "api_key", token: "SECRET" });
   const result = f.run(["--billing-source", "subscription"]);
   assert.equal(result.status, 1);
@@ -82,9 +133,8 @@ test("billing mismatch never sends a prompt", t => {
   assert.doesNotMatch(result.stderr, /SECRET/);
 });
 test("UX timeout never creates a background retry", t => {
-  if (process.platform === "win32") { t.skip("POSIX fake executable; native Windows invocation remains unverified"); return; }
   const f = fixture(t, { loggedIn: true, authMethod: "api_key" }, true);
-  const result = f.run(["--billing-source", "api", "--timeout-ms", "100"]);
+  const result = f.run(["--billing-source", "api", "--timeout-ms", process.platform === "win32" ? "2000" : "100"]);
   assert.equal(result.status, 1);
   assert.equal(f.calls().length, 2);
   assert.match(result.stderr, /timed out/);

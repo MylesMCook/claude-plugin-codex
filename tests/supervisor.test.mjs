@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude } from "./lib/fake-claude.mjs";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -34,8 +35,8 @@ function makeHarness(overrides = {}) {
   fs.mkdirSync(stateRoot);
   fs.mkdirSync(binDir);
   execFileSync("git", ["init", "-q"], { cwd: repo });
-  const fakeClaude = path.join(binDir, "claude");
-  fs.copyFileSync(fixture, fakeClaude);
+  const fakeClaude = path.join(binDir, fakeClaudeName);
+  writeFakeClaude(fakeClaude, fs.readFileSync(fixture, "utf8"), { module: true });
   fs.chmodSync(fakeClaude, 0o755);
   const scenarioFile = path.join(root, "scenario.json");
   const scenario = {
@@ -247,7 +248,9 @@ test("background supervision fails closed on unproved non-macOS platforms", {
   skip: process.platform === "darwin"
 }, () => {
   const harness = makeHarness();
-  const launched = runCompanion(harness, ["advise", "--background", "check"]);
+  // Isolate platform rejection from real MCP files above the temporary fixture.
+  // The unproved platform must reject before any MCP or provider can start.
+  const launched = runCompanion(harness, ["advise", "--background", "--allow-mcp", "check"]);
   assert.notEqual(launched.status, 0);
   assert.match(launched.stderr, /supervised background mode is unavailable on this platform/);
   assert.equal(readInvocations(harness).some((entry) => entry.args.includes("-p")), false);
@@ -602,7 +605,7 @@ supervisedTest("valid-looking JSON from a non-zero provider process is never aut
 
 supervisedTest("provider spawn failure is classified and its control resources are cleaned", () => {
   const harness = makeHarness();
-  fs.unlinkSync(path.join(harness.root, "bin", "claude"));
+  fs.unlinkSync(path.join(harness.root, "bin", fakeClaudeName));
   harness.env.PATH = path.join(harness.root, "bin");
   const launched = runCompanion(harness, ["advise", "--background", "check"]);
   assert.notEqual(launched.status, 0);

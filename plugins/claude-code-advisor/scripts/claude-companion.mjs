@@ -778,6 +778,9 @@ async function runForeground(ctx, kind, prompt, options = {}) {
         failureDiagnostic: `Claude command timed out after ${Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)}ms.`,
         result: `Claude command timed out after ${Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)}ms.`
       });
+      if (process.platform !== "darwin") {
+        throw Object.assign(new Error(`${error.message} Claude supervised background mode is unavailable on this platform.`), { code: "ETIMEDOUT" });
+      }
       if (ctx.state.capabilities && !ctx.state.capabilities.background) {
         throw error;
       }

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude } from "./lib/fake-claude.mjs";
 import { fileURLToPath } from "node:url";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
@@ -23,8 +24,17 @@ function waitFor(predicate, message, timeoutMs = 10000) {
 
 function processIdentity(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return null;
+  if (process.platform === "win32") return windowsProcesses().find(row => row.pid === pid)?.identity || null;
   const result = spawnSync("ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() || null : null;
+}
+
+function windowsProcesses() {
+  const script = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $null -ne $_.CreationDate } | ForEach-Object { @{pid=$_.ProcessId;parent=$_.ParentProcessId;identity=$_.CreationDate.ToUniversalTime().ToString('o')} } | ConvertTo-Json -Compress`;
+  const output = execFileSync(path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), [
+    "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")
+  ], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+  return JSON.parse(output);
 }
 
 function fixture(t, { unavailable = false } = {}) {
@@ -38,11 +48,11 @@ function fixture(t, { unavailable = false } = {}) {
   fs.mkdirSync(repo);
   fs.mkdirSync(bin);
   fs.mkdirSync(home);
-  fs.writeFileSync(path.join(bin, "claude"), `#!${process.execPath}
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!${process.execPath}
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.readFileSync(0);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ pid: process.pid, args }) + "\\n");
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ pid: process.pid, parent: process.ppid, args }) + "\\n");
 if (!args.includes("-p")) process.exit(2);
 const deadline = Date.now() + 15000;
 const timer = setInterval(() => {
@@ -53,7 +63,7 @@ const timer = setInterval(() => {
 }, 10);
 `, { mode: 0o755 });
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     // A nested fixture TMPDIR can exceed macOS's Unix socket path limit.
     TMPDIR: os.tmpdir(),
     GIT_CONFIG_NOSYSTEM: "1",
@@ -69,8 +79,11 @@ const timer = setInterval(() => {
   const owned = new Map();
   const rememberProcesses = () => {
     const roots = new Set([...calls().map((call) => call.pid), ...jobs().map((job) => job.supervisor?.pid)].filter(Number.isInteger));
-    const rows = execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }).trim().split(/\r?\n/)
-      .map((line) => line.trim().split(/\s+/).map(Number));
+    const windows = process.platform === "win32" ? windowsProcesses() : null;
+    if (windows) for (const call of calls()) roots.add(call.parent);
+    const rows = windows ? windows.map(row => [row.pid, row.parent])
+      : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }).trim().split(/\r?\n/)
+        .map((line) => line.trim().split(/\s+/).map(Number));
     // Include the supervisor's worker as well as the logged fake provider.
     for (let changed = true; changed;) {
       changed = false;
@@ -79,7 +92,7 @@ const timer = setInterval(() => {
       }
     }
     for (const pid of roots) {
-      const identity = processIdentity(pid);
+      const identity = windows ? windows.find(row => row.pid === pid)?.identity : processIdentity(pid);
       if (identity && !owned.has(pid)) owned.set(pid, identity);
     }
   };

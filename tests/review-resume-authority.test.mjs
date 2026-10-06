@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import {
   resolveStateDir, saveState, STATE_VERSION, SUPERVISED_RECORD_VERSION, SUPERVISED_TRANSPORT
@@ -31,7 +32,7 @@ function fixture(t) {
   fs.mkdirSync(bin);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"], { cwd: repo });
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env node
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const stdin = fs.readFileSync(0, "utf8");
@@ -41,7 +42,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
   }))});
 `, { mode: 0o755 });
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: threadId
   };
@@ -52,7 +53,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
   });
   const invoke = (args) => {
     const response = spawnSync(process.execPath, [companion, ...args, "--json"], {
-      cwd: repo, env, encoding: "utf8", timeout: 5000
+      cwd: repo, env, encoding: "utf8", timeout: fixtureTimeoutMs
     });
     assert.equal(response.error, undefined, "the command must finish within the test deadline");
     assert.equal(response.signal, null);

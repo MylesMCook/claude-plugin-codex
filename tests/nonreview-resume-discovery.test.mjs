@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
 
@@ -25,7 +26,7 @@ function fixture(t, currentThreadId = threadId) {
   fs.mkdirSync(bin);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"], { cwd: repo });
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env node
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!/usr/bin/env node
 const fs = require("node:fs");
 fs.readFileSync(0);
 fs.appendFileSync(${JSON.stringify(invocationLog)}, JSON.stringify(process.argv.slice(2)) + "\\n");
@@ -34,7 +35,7 @@ process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_err
   session_id: ${JSON.stringify(sessionId)}, result: "Synthetic continuation" }));
 `, { mode: 0o755 });
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: currentThreadId,
     SYNTHETIC_PROVIDER_FAIL: "0"
@@ -46,7 +47,7 @@ process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_err
   });
   const invoke = (args, { json = true, environment = {} } = {}) => {
     const response = spawnSync(process.execPath, [companion, ...args, ...(json ? ["--json"] : [])], {
-      cwd: repo, env: { ...env, ...environment }, encoding: "utf8", timeout: 5000
+      cwd: repo, env: { ...env, ...environment }, encoding: "utf8", timeout: fixtureTimeoutMs
     });
     assert.equal(response.error, undefined, "the command must finish within the test deadline");
     assert.equal(response.signal, null);

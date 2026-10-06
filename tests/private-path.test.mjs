@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import test from "node:test";
+import { restrictPrivatePath, hasPrivateWindowsAcl } from "../plugins/claude-code-advisor/scripts/lib/private-path.mjs";
+import { assertPrivatePermissions, createRedirect } from "./lib/permissions.mjs";
+
+test("Windows private ACL verification rejects extra, conditional and incomplete grants", () => {
+  const sid = "S-1-5-21-1-2-3-1001";
+  const privateFile = `D:P(A;;FA;;;SY)(A;;FA;;;${sid})`;
+  assert.equal(hasPrivateWindowsAcl(privateFile, sid, false), true);
+  assert.equal(hasPrivateWindowsAcl(privateFile, sid, true), false);
+  assert.equal(hasPrivateWindowsAcl(`D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;${sid})`, sid, true), true);
+  assert.equal(hasPrivateWindowsAcl(`D:P(A;OICIIO;FA;;;SY)(A;OICIIO;FA;;;${sid})`, sid, true), false);
+  for (const invalid of [
+    privateFile.replace("D:P", "D:AI"), privateFile + "(A;;FA;;;WD)",
+    privateFile + '(XA;;FA;;;WD;(Exists(@User.Claim)))',
+    privateFile.replace("FA", "FR"), privateFile.replace("SY", "WD"),
+    privateFile + "unexpected", privateFile.slice(0, -1),
+    privateFile.replaceAll("A;;FA", "A;IO;FA"),
+    `D:P(A;OICIIO;FA;;;SY)(A;OICIIO;FA;;;${sid})`
+  ]) assert.equal(hasPrivateWindowsAcl(invalid, sid, false), false);
+});
+
+test("private state protection removes broad grants and rejects redirected paths", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-private-path-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const directory = path.join(root, "state");
+  fs.mkdirSync(directory);
+  if (process.platform === "win32") {
+    const tool = path.join(process.env.SystemRoot, "System32", "icacls.exe");
+    execFileSync(tool, [directory, "/grant", "*S-1-1-0:(OI)(CI)F", "/q"]);
+  } else fs.chmodSync(directory, 0o777);
+  restrictPrivatePath(directory, 0o700);
+  assertPrivatePermissions(directory, 0o700);
+  const file = path.join(directory, "state.json");
+  fs.writeFileSync(file, "synthetic private state");
+  restrictPrivatePath(file, 0o600);
+  assertPrivatePermissions(file, 0o600);
+  const link = path.join(root, "redirect");
+  createRedirect(directory, link, "dir");
+  assert.throws(() => restrictPrivatePath(link, 0o700), /unsafe private state path/);
+  assert.equal(fs.readFileSync(file, "utf8"), "synthetic private state");
+});

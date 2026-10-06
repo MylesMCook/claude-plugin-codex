@@ -10,8 +10,9 @@ const currentFile = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(currentFile), "..");
 const skillMarker = "claude-code-advisor:claude";
 const advisePrompt = [
-  "Run $claude setup --json first, then exactly one $claude advise --model sonnet --max-turns 1 --timeout-ms 120000 --no-background-fallback to ask Claude Code to reply with exactly PASS.",
+  "Run $claude setup --json first, then exactly one $claude advise --effort xhigh --max-turns 1 --timeout-ms 120000 --no-background-fallback to ask Claude Code to reply with exactly PASS. Use the configured default Claude model, without a --model override.",
   "Run setup and advise as separate direct node commands using the same installed companion, without shell wrappers, cd or environment assignments. Do not retry either command.",
+  "Only setup uses --json. Do not add --json to advise; its command output must be plain text PASS.",
   "Do not enable background work, writes, web or MCP access. Do not request approval or escalation. Do not modify files.",
   "Return only a concise PASS/FAIL summary with the key command result."
 ].join(" ");
@@ -80,13 +81,20 @@ export function classifyRoutedOutput(value, { authenticationUnavailable = false,
   return "unexpected";
 }
 
-function shellWords(command) {
+function shellWords(command, windows = false, powershell = false) {
   const words = [];
   let word = "";
   let quote = null;
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index];
-    if (char === "\\" && quote !== "'") {
+    if (windows && !powershell && char === "\\" && quote === '"' && command[index + 1] === '"') {
+      word += command[++index];
+    } else if (windows && char === "'" && quote === "'" && command[index + 1] === "'") {
+      word += char;
+      index += 1;
+    } else if (windows && char === "`" && quote === '"' && command[index + 1] === '"') {
+      word += command[++index];
+    } else if (!windows && char === "\\" && quote !== "'") {
       if (++index === command.length) return [];
       word += command[index];
     } else if (char === quote) {
@@ -106,21 +114,35 @@ function shellWords(command) {
 }
 
 function routedInvocation(item) {
-  let words = shellWords(item.command);
+  const windows = /(?:^|\s|['"])[A-Za-z]:[\\/]|\b(?:node|pwsh|powershell)\.exe/u.test(item.command);
+  let words = shellWords(item.command, windows);
   // Codex records its execution shell even when the requested command is direct.
   // Unwrap one known shell invocation, then apply the same direct-node checks.
   if (["/bin/bash", "/bin/zsh"].includes(words[0])) {
     if (words.length !== 3 || !["-c", "-lc"].includes(words[1])) throw e2eFailure("routed-command", "unsafe-command");
     words = shellWords(words[2]);
+  } else if (["pwsh.exe", "powershell.exe"].includes(path.win32.basename(words[0] || "").toLowerCase())) {
+    let index = 1;
+    const startupFlags = new Set();
+    while (["-noprofile", "-nologo", "-noninteractive"].includes(words[index]?.toLowerCase())) {
+      const flag = words[index++].toLowerCase();
+      if (startupFlags.has(flag)) throw e2eFailure("routed-command", "unsafe-command");
+      startupFlags.add(flag);
+    }
+    if (words.length !== index + 2 || words[index].toLowerCase() !== "-command") throw e2eFailure("routed-command", "unsafe-command");
+    words = shellWords(words[index + 1], true, true);
   }
+  if (windows && words[0] === "&") words.shift();
   const [node, launcher, ...args] = words;
-  if (!node || path.basename(node) !== "node" || !launcher || !path.isAbsolute(launcher)
-    || !launcher.endsWith("/claude-companion.mjs") || words.some((arg) => /[$;&|<>`\n]/u.test(arg))) {
+  const normalizedLauncher = launcher?.replace(/\\/g, "/");
+  if (!node || !["node", "node.exe"].includes(path.win32.basename(node).toLowerCase()) || !launcher
+    || !(path.posix.isAbsolute(launcher) || path.win32.isAbsolute(launcher))
+    || !normalizedLauncher.endsWith("/claude-companion.mjs") || words.some((arg) => /[$;&|<>`\n]/u.test(arg))) {
     throw e2eFailure("routed-command", "unsafe-command");
   }
-  if (args[0] === "setup" && isDeepStrictEqual(args.slice(1), ["--json"])) return { kind: "setup", launcher };
+  if (args[0] === "setup" && isDeepStrictEqual(args.slice(1), ["--json"])) return { kind: "setup", launcher: normalizedLauncher };
   if (args[0] !== "advise") throw e2eFailure("routed-command", "unsafe-command");
-  const required = new Map([["--model", "sonnet"], ["--max-turns", "1"], ["--timeout-ms", "120000"], ["--no-background-fallback", null]]);
+  const required = new Map([["--effort", "xhigh"], ["--max-turns", "1"], ["--timeout-ms", "120000"], ["--no-background-fallback", null]]);
   let prompt = false;
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index];
@@ -128,8 +150,6 @@ function routedInvocation(item) {
       const value = required.get(arg);
       if (value !== null && args[++index] !== value) throw e2eFailure("routed-command", "unsafe-command");
       required.delete(arg);
-    } else if (arg === "--effort" && args[index + 1] === "xhigh") {
-      index += 1;
     } else if (arg.startsWith("-")) {
       throw e2eFailure("routed-command", "unsafe-command");
     } else {
@@ -137,7 +157,7 @@ function routedInvocation(item) {
     }
   }
   if (required.size || !prompt) throw e2eFailure("routed-command", "unsafe-command");
-  return { kind: "advise", launcher };
+  return { kind: "advise", launcher: normalizedLauncher };
 }
 
 function setupAuthentication(setup, launcher) {
@@ -241,6 +261,7 @@ function parseJsonLines(output) {
 }
 
 function main() {
+  const hostPermissions = process.argv.slice(2).includes("--host-permissions");
   if (!fs.existsSync(path.join(repoRoot, "package.json"))) {
     throw e2eFailure("preflight", "invalid-repository");
   }
@@ -259,11 +280,24 @@ function main() {
   const execOutput = run(
       "codex-exec",
       "codex",
-      ["--ask-for-approval", "never", "exec", "--sandbox", "workspace-write", "--cd", repoRoot, "--json", advisePrompt],
+      ["--ask-for-approval", "never", "exec", ...(hostPermissions ? [] : ["--sandbox", "workspace-write"]), "--cd", repoRoot, "--json", advisePrompt],
       { input: "", env: { ...process.env, CLAUDE_COMPANION_STATE_ROOT: stateRoot } }
     );
   // Failed or unknown runs retain their state, including any live job handles.
+  if (process.env.CLAUDE_PLUGIN_CODEX_E2E_DIAGNOSTICS === "1") {
+    const knownFlags = new Set(["-Command", "-NoProfile", "-NoLogo", "-NonInteractive", "-c", "-lc", "--json", "--effort", "--model", "--max-turns", "--timeout-ms", "--no-background-fallback"]);
+    const shapes = parseJsonLines(execOutput).filter(event => event.type === "item.completed" && event.item?.type === "command_execution" && event.item.command?.includes("claude-companion.mjs"))
+      .map(event => {
+        const words = shellWords(event.item.command, process.platform === "win32");
+        const first = path.win32.basename(words[0] || "").toLowerCase();
+        return { executable: ["node", "node.exe", "pwsh.exe", "powershell.exe", "bash", "zsh", "&"].includes(first) ? first : "other", words: words.length, flags: words.filter(word => knownFlags.has(word)), exitCode: event.item.exit_code };
+      });
+    process.stderr.write(`Codex command shapes: ${JSON.stringify(shapes)}\n`);
+  }
   const routedClassification = inspectRoutedRun(execOutput, { stateRoot, workspaceRoot: repoRoot });
+  if (hostPermissions && routedClassification !== "authenticated") {
+    throw e2eFailure("routed-output", "unexpected-result");
+  }
   try {
     fs.rmSync(stateRoot, { recursive: true, force: true });
   } catch {
@@ -275,8 +309,8 @@ function main() {
 
   console.log(
     routedClassification === "authenticated"
-      ? "codex skill routing ok: authenticated Claude advise used --model sonnet"
-      : "codex skill routing ok: Claude advise used --model sonnet; nested sandbox authentication was unavailable"
+      ? "codex skill routing ok: authenticated Claude advise used the configured default model"
+      : "codex skill routing ok: default-model Claude advise routed; nested sandbox authentication was unavailable"
   );
 }
 

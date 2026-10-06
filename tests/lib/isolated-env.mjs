@@ -17,7 +17,9 @@ export function isolatedClaudeEnv(root, executable = path.join(root, process.pla
   const state = path.join(canonicalRoot, "isolated-state");
   for (const directory of [home, config, state]) fs.mkdirSync(directory, { recursive: true });
   return {
-    PATH: [path.dirname(process.execPath), "/usr/bin", "/bin", "/usr/sbin"].join(path.delimiter),
+    PATH: [path.dirname(process.execPath), ...(process.platform === "win32"
+      ? (process.env.PATH ?? process.env.Path ?? "").split(path.delimiter).filter(directory => path.isAbsolute(directory))
+      : ["/usr/bin", "/bin", "/usr/sbin"])].join(path.delimiter),
     HOME: home,
     USERPROFILE: home,
     APPDATA: path.join(home, "AppData"),

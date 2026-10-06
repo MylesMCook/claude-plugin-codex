@@ -1,3 +1,4 @@
+import { assertPrivatePermissions, createRedirect } from "./lib/permissions.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,6 +7,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import {
   buildReviewPrompt,
@@ -35,8 +37,8 @@ function initRepo(prefix = "claude-command-repo-") {
 
 function makeFakeClaude(scriptBody) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-claude-"));
-  const bin = path.join(dir, "claude");
-  fs.writeFileSync(bin, `#!/usr/bin/env node\n${scriptBody}\n`, "utf8");
+  const bin = path.join(dir, fakeClaudeName);
+  writeFakeClaude(bin, `#!/usr/bin/env node\n${scriptBody}\n`, "utf8");
   fs.chmodSync(bin, 0o755);
   return { dir, bin };
 }
@@ -82,6 +84,7 @@ console.error("unsupported"); process.exit(2);
     fs.rmSync(stateRoot, { recursive: true, force: true });
   });
   fs.chmodSync(stateRoot, 0o755);
+  const originalRootMode = fs.statSync(stateRoot).mode & 0o777;
   const stdout = execFileSync(process.execPath, [companion, "setup", "--json"], {
     env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
@@ -111,16 +114,16 @@ console.error("unsupported"); process.exit(2);
   assert.equal(probe.args.includes("--strict-mcp-config"), true);
   assert.equal(probe.args.includes("--no-chrome"), true);
   assert.equal(probe.args.includes("--model"), false);
-  assert.equal(fs.statSync(stateRoot).mode & 0o777, 0o755);
+  assert.equal(fs.statSync(stateRoot).mode & 0o777, originalRootMode);
   const workspaceIndex = fs.readdirSync(stateRoot).find((entry) => entry.startsWith("claude-state-"));
   assert.ok(workspaceIndex);
   const indexDir = path.join(stateRoot, workspaceIndex);
   const latestStateFile = path.join(indexDir, "latest-state-dir");
   const stateDir = fs.readFileSync(latestStateFile, "utf8").trim();
-  assert.equal(fs.statSync(indexDir).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(path.join(stateDir, "state.json")).mode & 0o777, 0o600);
-  assert.equal(fs.statSync(latestStateFile).mode & 0o777, 0o600);
+  assertPrivatePermissions(indexDir, 0o700);
+  assertPrivatePermissions(stateDir, 0o700);
+  assertPrivatePermissions(path.join(stateDir, "state.json"), 0o600);
+  assertPrivatePermissions(latestStateFile, 0o600);
 });
 
 function setupProbeFixture(t, { version = "2.1.132", authExit = 0, authSignal = false, printExit = 0, printSignal = false, probeError = null } = {}) {
@@ -161,7 +164,7 @@ const childProcess = require("node:child_process");
 const { syncBuiltinESMExports } = require("node:module");
 const original = childProcess.spawnSync;
 childProcess.spawnSync = function(command, args, options) {
-  if (command === "claude" || command === "${fs.realpathSync(fake.bin)}") {
+  if (command === "claude" || command === ${JSON.stringify(isolatedClaudeEnv(fake.dir, fake.bin).CLAUDE_COMPANION_EXECUTABLE)}) {
     const probe = args.includes("-p") ? "print" : args[0] === "auth" ? "auth" : "version";
     fs.appendFileSync(${JSON.stringify(deadlineLog)}, JSON.stringify({ probe, timeoutMs: options.timeout }) + "\\n");
     if (${JSON.stringify(probeError)}?.startsWith(probe + "-")) {
@@ -184,7 +187,7 @@ syncBuiltinESMExports();
     },
     cwd: root,
     encoding: "utf8",
-    timeout: 5000
+    timeout: fixtureTimeoutMs
   });
   assert.equal(result.error, undefined);
   assert.equal(result.signal, null);
@@ -211,7 +214,7 @@ test("setup skips the provider when authentication is unavailable in this proces
 });
 
 test("setup distinguishes authentication check errors and skips the provider", (t) => {
-  const { payload, invocations } = setupProbeFixture(t, { authSignal: true });
+  const { payload, invocations } = setupProbeFixture(t, process.platform === "win32" ? { probeError: "auth-error" } : { authSignal: true });
   assert.equal(payload.ready, false);
   assert.deepEqual(payload.capabilities.auth, { loggedIn: false, scope: "current-process", status: "check-failed" });
   assert.deepEqual(payload.capabilities.printProbe, { status: "skipped", reason: "authentication-check-failed" });
@@ -241,7 +244,7 @@ test("setup keeps provider failure distinct from available authentication", (t) 
 });
 
 test("setup reports provider command errors without exposing raw output", (t) => {
-  const { payload, invocations } = setupProbeFixture(t, { printSignal: true });
+  const { payload, invocations } = setupProbeFixture(t, process.platform === "win32" ? { probeError: "print-error" } : { printSignal: true });
   assert.equal(payload.ready, false);
   assert.deepEqual(payload.capabilities.auth, { loggedIn: true, scope: "current-process", status: "available" });
   assert.deepEqual(payload.capabilities.printProbe, { status: "failed", reason: "command-error" });
@@ -660,7 +663,7 @@ console.error("unsupported"); process.exit(2);
   });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, new RegExp(`${parent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.mcp\\.json`));
+  assert.ok(result.stderr.includes(path.join(parent, ".mcp.json")));
   assert.match(result.stderr, /--allow-mcp/);
 });
 
@@ -732,7 +735,7 @@ else process.exit(2);
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-"));
   const result = spawnSync(
     process.execPath,
-    [companion, "advise", "--timeout-ms", "50", "slow", "--json"],
+    [companion, "advise", "--timeout-ms", process.platform === "win32" ? "2000" : "50", "slow", "--json"],
     {
       env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
       cwd: stateRoot,

@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import {
   resolveStateDir, saveState, STATE_VERSION, SUPERVISED_RECORD_VERSION, SUPERVISED_TRANSPORT
@@ -32,7 +33,7 @@ function fixture(t) {
   fs.mkdirSync(bin);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"], { cwd: repo });
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env node
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.readFileSync(0);
@@ -40,7 +41,7 @@ fs.appendFileSync(${JSON.stringify(invocationLog)}, JSON.stringify(args) + "\\n"
 process.stdout.write(${JSON.stringify(JSON.stringify({ type: "result", subtype: "success", is_error: false, session_id: sessionId, result: JSON.stringify(payload) }))});
 `, { mode: 0o755 });
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     CLAUDE_COMPANION_STATE_ROOT: path.join(root, "state"),
     CODEX_THREAD_ID: threadId
   };
@@ -48,7 +49,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({ type: "result", subtype: 
   const stateFile = path.join(stateDir, "state.json");
   const invoke = (args, json = true) => {
     const response = spawnSync(process.execPath, [companion, ...args, ...(json ? ["--json"] : [])], {
-      cwd: repo, env, encoding: "utf8", timeout: 5000
+      cwd: repo, env, encoding: "utf8", timeout: fixtureTimeoutMs
     });
     assert.equal(response.error, undefined, "readback must terminate within the test deadline");
     assert.equal(response.signal, null);

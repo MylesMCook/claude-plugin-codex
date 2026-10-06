@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
+import { fakeClaudeName, writeFakeClaude, fixtureTimeoutMs } from "./lib/fake-claude.mjs";
 
 import {
   buildBackgroundArgs, buildClaudeArgs, buildSupervisedPrintArgs, EMPTY_MCP_CONFIG,
@@ -35,7 +36,7 @@ function fixture(t, { git = true, planProse = false } = {}) {
     execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "base"], { cwd: repo });
     fs.writeFileSync(path.join(repo, "tracked.txt"), "working-tree-change\n");
   }
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env node
+  writeFakeClaude(path.join(bin, fakeClaudeName), `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const stdin = fs.readFileSync(0, "utf8");
@@ -63,7 +64,7 @@ childProcess.spawn = function(command, args, options) {
 syncBuiltinESMExports();
 `);
   const env = {
-    ...isolatedClaudeEnv(root, path.join(bin, "claude")),
+    ...isolatedClaudeEnv(root, path.join(bin, fakeClaudeName)),
     CLAUDE_COMPANION_STATE_ROOT: stateRoot,
     CODEX_THREAD_ID: threadId
   };
@@ -81,7 +82,7 @@ syncBuiltinESMExports();
   };
   const invoke = (args) => {
     const result = spawnSync(process.execPath, ["--require", preload, companion, ...args], {
-      cwd: repo, env, encoding: "utf8", timeout: 5000
+      cwd: repo, env, encoding: "utf8", timeout: fixtureTimeoutMs
     });
     assert.equal(result.error, undefined, "command must finish within the test deadline");
     assert.equal(result.signal, null);
