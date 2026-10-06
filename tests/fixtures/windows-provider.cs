@@ -102,6 +102,7 @@ class MockProvider {
   static int Main(string[] args) {
     IntPtr job = IntPtr.Zero;
     Process child = null;
+    string gate = null;
     try {
       // The pristine utility binary has no provider config. Copied providers
       // always forward arbitrary arguments, including these utility flag names.
@@ -111,25 +112,26 @@ class MockProvider {
       }
       string[] config = File.ReadAllLines(Assembly.GetExecutingAssembly().Location + ".mock");
       if (config.Length != 2 || !File.Exists(config[0]) || !File.Exists(config[1])) return 91;
-      // No fixture code runs before job assignment. The launcher supplies the
-      // first stdin byte, then forwards the original stdin without changing argv.
-      string bootstrap = "if(require('node:fs').readSync(0,Buffer.alloc(1),0,1,null)!==1)process.exit(95);"
-        + "import(require('node:url').pathToFileURL(process.argv[1]).href);";
+      // Keep stdin as an inherited byte stream. Framework StreamWriter can emit
+      // a UTF-8 BOM under a UTF-8 console, so readiness uses a separate gate.
+      gate = Path.Combine(Path.GetTempPath(), "claude-mock-gate-" + Guid.NewGuid());
+      string bootstrap = "const fs=require('node:fs'),gate=process.env.CLAUDE_MOCK_GATE;"
+        + "while(!fs.existsSync(gate))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);"
+        + "fs.unlinkSync(gate);import(require('node:url').pathToFileURL(process.argv[1]).href);";
       var command = new StringBuilder("-e ").Append(Quote(bootstrap)).Append(" ").Append(Quote(config[1]));
       foreach (string argument in args) command.Append(" ").Append(Quote(argument));
       job = CreateJobObject(IntPtr.Zero, null);
       var limits = new ExtendedLimits();
       limits.Basic.Flags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
       if (job == IntPtr.Zero || !SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(limits))) return 92;
-      child = Process.Start(new ProcessStartInfo(config[0], command.ToString()) {
+      var start = new ProcessStartInfo(config[0], command.ToString()) {
         UseShellExecute = false, CreateNoWindow = true,
-        RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
-      });
+        RedirectStandardInput = false, RedirectStandardOutput = true, RedirectStandardError = true
+      };
+      start.EnvironmentVariables["CLAUDE_MOCK_GATE"] = gate;
+      child = Process.Start(start);
       if (!AssignProcessToJobObject(job, child.Handle)) { child.Kill(); return 93; }
-      child.StandardInput.BaseStream.WriteByte(1);
-      child.StandardInput.BaseStream.Flush();
-      Console.OpenStandardInput().CopyToAsync(child.StandardInput.BaseStream)
-        .ContinueWith(task => { try { child.StandardInput.Close(); } catch {} });
+      File.WriteAllText(gate, "");
       Task output = child.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
       Task error = child.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
       child.WaitForExit();
@@ -140,6 +142,7 @@ class MockProvider {
       return child.ExitCode;
     } catch { return 94; }
     finally {
+      if (gate != null && File.Exists(gate)) File.Delete(gate);
       if (job != IntPtr.Zero) CloseHandle(job);
       if (child != null) child.Dispose();
     }
