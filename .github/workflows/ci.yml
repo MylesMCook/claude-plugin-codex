@@ -2,6 +2,11 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_probe_only:
+        description: Run the bounded Windows ACL environment diagnostic only
+        type: boolean
+        default: false
   pull_request:
   push:
     branches:
@@ -12,6 +17,7 @@ permissions:
 
 jobs:
   test:
+    if: ${{ !inputs.windows_probe_only }}
     runs-on: ubuntu-latest
     name: Node ${{ matrix.node }}
     strategy:
@@ -33,11 +39,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.windows_probe_only && '["windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           package-manager-cache: false
-      - run: npm run validate
+      - if: runner.os == 'Windows'
+        run: node tests/windows-acl-probe.mjs
+      - if: ${{ !inputs.windows_probe_only }}
+        run: npm run validate
