@@ -1,0 +1,2 @@
+# Keep the published plugin identical in Git-backed installs on every OS.
+plugins/claude-code-advisor/** text eol=lf
