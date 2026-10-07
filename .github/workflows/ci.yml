@@ -49,6 +49,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: |
           node tests/run-synthetic.mjs tests/private-path.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test --test-name-pattern "native mock forwards|native Windows process inspection" tests/windows-provider.test.mjs
       - if: ${{ !inputs.windows_probe_only }}
         run: npm run validate

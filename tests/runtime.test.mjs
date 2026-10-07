@@ -1604,7 +1604,8 @@ test("long state paths publish private atomic files and preserve state on interr
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-long-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const boundary = path.join(root, "state-" + "x".repeat(85));
-  const stateDir = path.join(boundary, "workspace-" + "y".repeat(70), "thread-" + "z".repeat(35));
+  let stateDir = path.join(boundary, "workspace-" + "y".repeat(70), "thread-" + "z".repeat(35));
+  while (stateDir.length <= 285) stateDir = path.join(stateDir, "long-" + "a".repeat(45));
   assert.ok(path.join(stateDir, ".state.json.12345." + "a".repeat(36) + ".tmp").length > 285);
   saveState(stateDir, { ...emptyState(), jobs: [{ id: "before", status: "completed" }] }, { pathBoundary: boundary });
   const file = path.join(stateDir, "state.json"); const before = fs.readFileSync(file);

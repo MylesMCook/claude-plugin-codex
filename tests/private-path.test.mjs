@@ -76,7 +76,8 @@ test("Windows ACL repair supports long directories and exclusive temporary files
   if (process.platform !== "win32") { t.skip("Requires Windows long-path ACLs"); return; }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-long-acl-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const directory = path.join(root, "state-" + "x".repeat(95), "nested-" + "y".repeat(95));
+  let directory = path.join(root, "state-" + "x".repeat(95), "nested-" + "y".repeat(95));
+  while (directory.length <= 260) directory = path.join(directory, "long-" + "z".repeat(45));
   fs.mkdirSync(directory, { recursive: true });
   assert.ok(directory.length > 260);
   const tool = path.join(process.env.SystemRoot, "System32", "icacls.exe");
