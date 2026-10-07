@@ -326,11 +326,11 @@ function validateStateShape(parsed, stateFile = "state.json") {
   };
 }
 
-function readStateFile(stateFile) {
+function readStateFile(stateFile, alreadyProtected = false) {
   if (!assertSafeRegularFile(stateFile, "state file")) {
     return emptyState();
   }
-  restrictPrivatePath(stateFile, 0o600);
+  if (!alreadyProtected) restrictPrivatePath(stateFile, 0o600);
   let text;
   try {
     const noFollow = fs.constants.O_NOFOLLOW || 0;
@@ -375,49 +375,63 @@ function lockOwnerAlive(owner) {
 }
 
 function acquireFileLock(lockFile, timeoutMs = DEFAULT_STATE_LOCK_TIMEOUT_MS) {
-  const startedAt = Date.now();
   const token = randomUUID();
   const owner = { token, pid: process.pid, hostname: os.hostname(), createdAt: nowIso() };
-  while (true) {
-    try {
-      const fd = fs.openSync(lockFile, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
-      try {
-        fs.writeFileSync(fd, `${JSON.stringify(owner)}\n`, "utf8");
-        fs.fsyncSync(fd);
-      } finally {
-        fs.closeSync(fd);
+  const content = `${JSON.stringify(owner)}\n`;
+  let claimed = false;
+  try {
+    return withPrivateTemporaryFile(lockFile, candidate => {
+      fs.writeFileSync(candidate.fd, content, "utf8");
+      fs.fsyncSync(candidate.fd);
+      candidate.close();
+      const startedAt = Date.now();
+      while (true) {
+        try {
+          // Claim the already private inode exclusively. Expensive ACL repair
+          // happens before ownership, so competing writers do not serialize it.
+          try { fs.linkSync(candidate.tempFile, lockFile); claimed = true; }
+          catch (error) {
+            if (!["ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(error?.code)) throw error;
+            // Keep exclusive-create locking on filesystems without hard links.
+            const fd = fs.openSync(lockFile, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
+            claimed = true;
+            const created = fs.fstatSync(fd, { bigint: true });
+            try { fs.writeFileSync(fd, content, "utf8"); fs.fsyncSync(fd); }
+            catch (writeError) {
+              // An incomplete owner record has no usable token. Remove only
+              // the exclusively created inode, while its descriptor is open.
+              const current = fs.lstatSync(lockFile, { bigint: true });
+              if (current.isSymbolicLink() || !current.isFile() || current.dev !== created.dev || current.ino !== created.ino)
+                throw new Error(`Refusing to remove replaced state lock: ${lockFile}.`);
+              fs.unlinkSync(lockFile);
+              claimed = false;
+              throw writeError;
+            }
+            finally { fs.closeSync(fd); }
+            restrictPrivatePath(lockFile, 0o600, { newFile: true });
+          }
+          assertSafeRegularFile(lockFile, "state lock", { allowMissing: false });
+          return owner;
+        } catch (error) {
+          if (error?.code !== "EEXIST" || claimed) throw error;
+          try { assertSafeRegularFile(lockFile, "state lock", { allowMissing: false }); }
+          catch (lockError) { if (lockError?.code === "ENOENT") continue; throw lockError; }
+          let existing = null;
+          try { existing = JSON.parse(fs.readFileSync(lockFile, "utf8")); }
+          catch { /* A malformed lock is not safe to break. */ }
+          if (Date.now() - startedAt >= timeoutMs) {
+            const staleHint = lockOwnerAlive(existing) === false
+              ? " The recorded owner is not running; verify no process owns the lock, then remove that one stale lock manually."
+              : "";
+            throw new Error(`Timed out after ${timeoutMs}ms waiting for state lock ${lockFile}.${staleHint}`);
+          }
+          sleepSync(Math.min(50, Math.max(5, timeoutMs - (Date.now() - startedAt))));
+        }
       }
-      try {
-        restrictPrivatePath(lockFile, 0o600, { newFile: true });
-      } catch (error) {
-        releaseFileLock(lockFile, owner);
-        throw error;
-      }
-      return owner;
-    } catch (error) {
-      if (error?.code !== "EEXIST") {
-        throw error;
-      }
-      try {
-        assertSafeRegularFile(lockFile, "state lock", { allowMissing: false });
-      } catch (lockError) {
-        if (lockError?.code === "ENOENT") continue;
-        throw lockError;
-      }
-      let existing = null;
-      try {
-        existing = JSON.parse(fs.readFileSync(lockFile, "utf8"));
-      } catch {
-        // A malformed lock is not safe to break. Bounded timeout below is fail-closed.
-      }
-      if (Date.now() - startedAt >= timeoutMs) {
-        const staleHint = lockOwnerAlive(existing) === false
-          ? " The recorded owner is not running; verify no process owns the lock, then remove that one stale lock manually."
-          : "";
-        throw new Error(`Timed out after ${timeoutMs}ms waiting for state lock ${lockFile}.${staleHint}`);
-      }
-      sleepSync(Math.min(50, Math.max(5, timeoutMs - (Date.now() - startedAt))));
-    }
+    });
+  } catch (error) {
+    if (claimed) releaseFileLock(lockFile, owner);
+    throw error;
   }
 }
 
@@ -450,32 +464,30 @@ function fsyncDirectory(directory) {
   }
 }
 
-function atomicWritePrivateFile(file, content, options = {}) {
-  const directory = path.dirname(file);
-  const basename = path.basename(file);
-  assertSafeRegularFile(file, basename);
-  const tempFile = path.join(directory, `.${basename}.${process.pid}.${randomUUID()}.tmp`);
+function withPrivateTemporaryFile(file, callback) {
+  const tempFile = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
   let fd;
   try {
     fd = fs.openSync(tempFile, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
-    fs.writeFileSync(fd, content, "utf8");
-    fs.fsyncSync(fd);
-    fs.closeSync(fd);
-    fd = undefined;
     restrictPrivatePath(tempFile, 0o600, { newFile: true });
-    options.beforeRename?.({ file, tempFile });
-    assertSafeRegularFile(file, basename);
-    fs.renameSync(tempFile, file);
-    fsyncDirectory(directory);
+    return callback({ tempFile, fd, close() { if (fd !== undefined) { fs.closeSync(fd); fd = undefined; } } });
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
     try {
-      const tempStat = fs.lstatSync(tempFile);
-      if (tempStat.isFile() && !tempStat.isSymbolicLink()) fs.unlinkSync(tempFile);
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
+      const stat = fs.lstatSync(tempFile);
+      if (stat.isFile() && !stat.isSymbolicLink()) fs.unlinkSync(tempFile);
+    } catch (error) { if (error?.code !== "ENOENT") throw error; }
   }
+}
+
+function atomicWritePrivateFile(file, content, prepared, options = {}) {
+  fs.writeFileSync(prepared.fd, content, "utf8");
+  fs.fsyncSync(prepared.fd);
+  prepared.close();
+  options.beforeRename?.({ file, tempFile: prepared.tempFile });
+  assertSafeRegularFile(file, path.basename(file));
+  fs.renameSync(prepared.tempFile, file);
+  fsyncDirectory(path.dirname(file));
 }
 
 function normaliseStateForWrite(state) {
@@ -495,16 +507,19 @@ export function transactState(stateDir, mutator, options = {}) {
   assertSafeManagedDirectory(stateDir, "state directory", options.pathBoundary);
   const stateFile = path.join(stateDir, "state.json");
   const lockFile = path.join(stateDir, ".state.lock");
-  const owner = acquireFileLock(lockFile, Number(options.lockTimeoutMs ?? DEFAULT_STATE_LOCK_TIMEOUT_MS));
-  try {
-    const current = readStateFile(stateFile);
-    const mutated = mutator(current);
-    const next = normaliseStateForWrite(mutated === undefined ? current : mutated);
-    atomicWritePrivateFile(stateFile, `${JSON.stringify(next, null, 2)}\n`, options);
-    return next;
-  } finally {
-    releaseFileLock(lockFile, owner);
-  }
+  if (assertSafeRegularFile(stateFile, "state file")) restrictPrivatePath(stateFile, 0o600);
+  return withPrivateTemporaryFile(stateFile, prepared => {
+    const owner = acquireFileLock(lockFile, Number(options.lockTimeoutMs ?? DEFAULT_STATE_LOCK_TIMEOUT_MS));
+    try {
+      // The directory and existing file are private before acquisition; other
+      // writers publish private inodes. Read the latest bytes under the lock.
+      const current = readStateFile(stateFile, true);
+      const mutated = mutator(current);
+      const next = normaliseStateForWrite(mutated === undefined ? current : mutated);
+      atomicWritePrivateFile(stateFile, `${JSON.stringify(next, null, 2)}\n`, prepared, options);
+      return next;
+    } finally { releaseFileLock(lockFile, owner); }
+  });
 }
 
 export function saveState(stateDir, state, options = {}) {
@@ -515,13 +530,14 @@ export function updateLatestStateDir(indexDir, stateDir, options = {}) {
   assertSafeManagedDirectory(indexDir, "workspace state index directory", options.pathBoundary);
   const latestFile = path.join(indexDir, "latest-state-dir");
   const lockFile = path.join(indexDir, ".latest-state-dir.lock");
-  const owner = acquireFileLock(lockFile, Number(options.lockTimeoutMs ?? DEFAULT_STATE_LOCK_TIMEOUT_MS));
-  try {
-    atomicWritePrivateFile(latestFile, `${stateDir}\n`, options);
-    return latestFile;
-  } finally {
-    releaseFileLock(lockFile, owner);
-  }
+  assertSafeRegularFile(latestFile, "latest-state-dir");
+  return withPrivateTemporaryFile(latestFile, prepared => {
+    const owner = acquireFileLock(lockFile, Number(options.lockTimeoutMs ?? DEFAULT_STATE_LOCK_TIMEOUT_MS));
+    try {
+      atomicWritePrivateFile(latestFile, `${stateDir}\n`, prepared, options);
+      return latestFile;
+    } finally { releaseFileLock(lockFile, owner); }
+  });
 }
 
 export function generateJobId(prefix = "claude") {

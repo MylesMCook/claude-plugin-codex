@@ -1617,3 +1617,60 @@ test("long state paths publish private atomic files and preserve state on interr
   assert.deepEqual(loadState(stateDir, { pathBoundary: boundary }).jobs.map(j => j.id), ["before"]);
   assert.equal(fs.readdirSync(stateDir).some(n => n.endsWith(".tmp") || n === ".state.lock"), false);
 });
+
+
+test("lock claim falls back only when hard links are unsupported", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-lock-link-fallback-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stateDir = path.join(root, "state");
+  const link = fs.linkSync;
+  try {
+    fs.linkSync = () => { throw Object.assign(new Error("unsupported hard link"), { code: "ENOTSUP" }); };
+    saveState(stateDir, emptyState());
+    assertPrivatePermissions(path.join(stateDir, "state.json"), 0o600);
+    fs.linkSync = () => { throw Object.assign(new Error("denied hard link"), { code: "EACCES" }); };
+    assert.throws(() => saveState(stateDir, emptyState()), /denied hard link/);
+  } finally { fs.linkSync = link; }
+  assert.equal(fs.readdirSync(stateDir).some(name => name.endsWith(".tmp") || name === ".state.lock"), false);
+});
+
+test("lock candidate cleanup failure releases its matching claimed lock", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-lock-candidate-cleanup-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stateDir = path.join(root, "state");
+  const unlink = fs.unlinkSync;
+  let injected = false;
+  try {
+    fs.unlinkSync = function(file, ...args) {
+      if (!injected && path.basename(file).startsWith("..state.lock.") && file.endsWith(".tmp")) {
+        injected = true; throw Object.assign(new Error("candidate cleanup denied"), { code: "EACCES" });
+      }
+      return unlink.call(this, file, ...args);
+    };
+    assert.throws(() => saveState(stateDir, emptyState()), /candidate cleanup denied/);
+  } finally { fs.unlinkSync = unlink; }
+  assert.equal(injected, true);
+  assert.equal(fs.existsSync(path.join(stateDir, ".state.lock")), false);
+  assert.doesNotThrow(() => saveState(stateDir, emptyState(), { lockTimeoutMs: 20 }));
+});
+
+
+test("unsupported-link lock fallback cleans an incomplete owner record", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-lock-partial-owner-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stateDir = path.join(root, "state");
+  const lockFile = path.join(stateDir, ".state.lock");
+  const link = fs.linkSync, open = fs.openSync, write = fs.writeFileSync;
+  let lockFd;
+  try {
+    fs.linkSync = () => { throw Object.assign(new Error("unsupported"), { code: "ENOTSUP" }); };
+    fs.openSync = function(file, ...args) { const fd = open.call(this, file, ...args); if (file === lockFile) lockFd = fd; return fd; };
+    fs.writeFileSync = function(file, ...args) {
+      if (file === lockFd) { write.call(this, file, "{", "utf8"); throw Object.assign(new Error("partial owner write"), { code: "ENOSPC" }); }
+      return write.call(this, file, ...args);
+    };
+    assert.throws(() => saveState(stateDir, emptyState()), /partial owner write/);
+  } finally { fs.linkSync = link; fs.openSync = open; fs.writeFileSync = write; }
+  assert.equal(fs.readdirSync(stateDir).some(name => name.endsWith(".tmp") || name === ".state.lock"), false);
+  assert.doesNotThrow(() => saveState(stateDir, emptyState(), { lockTimeoutMs: 20 }));
+});

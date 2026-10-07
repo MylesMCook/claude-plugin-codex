@@ -4,6 +4,8 @@ All notable public changes to Claude Code Advisor for Codex are recorded here.
 
 ## 0.1.21 - 2026-10-07
 
+- prepare private lock/state files before acquiring the state lock, keeping
+  concurrent writers within the existing wait without caching ACL approval
 - construct ACLs directly through .NET so repair avoids PowerShell module autoload
 - support extended Windows paths for ownership and ACL inspection/replacement,
   including long atomic state filenames and parent directories
