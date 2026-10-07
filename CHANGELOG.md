@@ -4,6 +4,7 @@ All notable public changes to Claude Code Advisor for Codex are recorded here.
 
 ## 0.1.21 - 2026-10-07
 
+- construct ACLs directly through .NET so repair avoids PowerShell module autoload
 - support extended Windows paths for ownership and ACL inspection/replacement,
   including long atomic state filenames and parent directories
 - protect an explicitly configured state root while preserving implicit parents
