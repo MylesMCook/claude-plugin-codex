@@ -38,6 +38,11 @@ review and independent state privacy pass at366/371-character state paths.
 Codex routing passes with nested-sandbox authentication unavailable; smoke
 confirms installed Claude2.1.287 and excludes opt-in background execution.
 
+Hosted 6c CI passes five jobs but Windows fails88 guarded readback checks:
+the seed helper prepared private children without protecting its explicit root.
+Repairing that root then triggered the test no-provider-execution guard. Seed
+now uses the actual explicit boundary before readback; guard remains unchanged.
+
 Sharing patch: Mac runtime92pass/1Windows skip; physical Windows held-reader and
 permanent-denial regressions2/2 pass. An initial new test had a missing fixture
 import, now fixed. Final full CI and package receipts remain required.

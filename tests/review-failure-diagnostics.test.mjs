@@ -89,7 +89,9 @@ require("node:module").syncBuiltinESMExports();
   };
   return {
     invoke,
-    seed: (jobs) => saveState(stateDir, { version: STATE_VERSION, capabilities: null, jobs: Array.isArray(jobs) ? jobs : [jobs] }),
+    // Prepare the explicit root before installing the no-execution guard.
+    // A seeded fixture must have the same private boundary as real execution.
+    seed: (jobs) => saveState(stateDir, { version: STATE_VERSION, capabilities: null, jobs: Array.isArray(jobs) ? jobs : [jobs] }, { pathBoundary: env.CLAUDE_COMPANION_STATE_ROOT }),
     bytes: () => fs.readFileSync(stateFile),
     jobs: () => JSON.parse(fs.readFileSync(stateFile, "utf8")).jobs,
     invocations: () => fs.existsSync(invocationLog) ? fs.readFileSync(invocationLog, "utf8").trim().split("\n").map(JSON.parse) : [],
