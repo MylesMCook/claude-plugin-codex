@@ -30,8 +30,21 @@ one resumed session, and structured review pass; review took 2.6 seconds at the
 unchanged 120-second deadline. Metadata and native CLI smoke pass; restricted
 Codex routing passes with authentication denial correctly reported.
 
-Full Windows validation, six-job CI, final installed-byte parity and publication
-remain pending. Evidence is retained in the October 7 task scratch directory.
-No Windows primary checkout, credentials or unrelated marketplace edits changed.
-Next: complete release gates, land main, publish 0.1.20, update the canonical
-marketplace pin and verify deployed package bytes and fresh-session usage.
+Publication completed at the user's request. Source main and release v0.1.20
+contain `50af938ef69de6dcdfd2c7dac8b13bd6d3c2565f`; canonical marketplace commit
+`47d06d2609f2601a676cd1e92d319a64d6e0a1ef` pins that exact source. A fresh
+Git-backed catalog confirms visibility. Fresh installed Mac package bytes match
+all 12 final source files; the real final-package foreground conversation and
+structured review pass. The Windows real conversation recalls its first-turn
+marker and a structured review completes in 25.6 seconds.
+
+Source CI: Mac, Linux and Node20/22/24 pass. Full Windows CI is still running;
+no full Windows pass is claimed. Exact receipt:
+https://github.com/MylesMCook/claude-plugin-codex/actions/runs/37648759981
+The bounded physical Windows full run also remains in progress. Evidence is in
+the October 7 task scratch directory. No Windows primary checkout, credentials
+or unrelated marketplace edits changed. The user will install the published
+update; no live installation is part of this publication.
+
+Next: user marketplace refresh/install. Inspect the remaining Windows CI receipt
+if needed; publication, source landing and canonical catalog update are complete.
