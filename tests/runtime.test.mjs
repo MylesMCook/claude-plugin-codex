@@ -1584,3 +1584,35 @@ test("foreground and background default capability restrictions and explicit wri
     assert.ok(args.includes("--strict-mcp-config"));
   }
 });
+
+test("explicit state roots are private while implicit parents retain their permissions", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-root-privacy-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const boundary = path.join(root, "state"); fs.mkdirSync(boundary, { mode: 0o777 });
+  const stateDir = path.join(boundary, "workspace", "thread");
+  saveState(stateDir, emptyState(), { pathBoundary: boundary });
+  assertPrivatePermissions(boundary, 0o700);
+  assertPrivatePermissions(stateDir, 0o700);
+  assertPrivatePermissions(path.join(stateDir, "state.json"), 0o600);
+  const untouched = path.join(root, "unmanaged"); fs.mkdirSync(untouched, { mode: 0o755 });
+  const before = fs.statSync(untouched).mode;
+  saveState(path.join(untouched, "thread"), emptyState());
+  assert.equal(fs.statSync(untouched).mode, before);
+});
+
+test("long state paths publish private atomic files and preserve state on interruption", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-long-state-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const boundary = path.join(root, "state-" + "x".repeat(85));
+  const stateDir = path.join(boundary, "workspace-" + "y".repeat(70), "thread-" + "z".repeat(35));
+  assert.ok(path.join(stateDir, ".state.json.12345." + "a".repeat(36) + ".tmp").length > 285);
+  saveState(stateDir, { ...emptyState(), jobs: [{ id: "before", status: "completed" }] }, { pathBoundary: boundary });
+  const file = path.join(stateDir, "state.json"); const before = fs.readFileSync(file);
+  assert.throws(() => saveState(stateDir, emptyState(), { pathBoundary: boundary, beforeRename: ({tempFile}) => {
+    assertPrivatePermissions(tempFile, 0o600); throw new Error("synthetic interruption");
+  } }), /synthetic interruption/);
+  assert.deepEqual(fs.readFileSync(file), before);
+  assertPrivatePermissions(file, 0o600);
+  assert.deepEqual(loadState(stateDir, { pathBoundary: boundary }).jobs.map(j => j.id), ["before"]);
+  assert.equal(fs.readdirSync(stateDir).some(n => n.endsWith(".tmp") || n === ".state.lock"), false);
+});

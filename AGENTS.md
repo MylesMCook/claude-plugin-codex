@@ -22,6 +22,8 @@ Codex remains the orchestrator.
 ## Commands
 
 - Run `npm run validate` before claiming the plugin is ready.
+- Windows ACL preflight: `node tests/run-synthetic.mjs tests/private-path.test.mjs`.
+  This uses the full suite's isolated environment and native process containment.
 - Run `npm run test:smoke` after changes that touch Claude CLI invocation,
   runtime behavior, or install instructions.
 - Run `npm run test:e2e:codex` after changes that affect Codex plugin routing,

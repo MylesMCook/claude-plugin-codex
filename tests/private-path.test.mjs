@@ -71,3 +71,22 @@ test("exclusive new Windows state files remove default or explicit foreign grant
   assertPrivatePermissions(file, 0o600);
   assert.equal(fs.readFileSync(file, "utf8"), "synthetic");
 });
+
+test("Windows ACL repair supports long directories and exclusive temporary files", t => {
+  if (process.platform !== "win32") { t.skip("Requires Windows long-path ACLs"); return; }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-long-acl-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const directory = path.join(root, "state-" + "x".repeat(95), "nested-" + "y".repeat(95));
+  fs.mkdirSync(directory, { recursive: true });
+  assert.ok(directory.length > 260);
+  const tool = path.join(process.env.SystemRoot, "System32", "icacls.exe");
+  execFileSync(tool, [path.toNamespacedPath(directory), "/grant", "*S-1-1-0:(OI)(CI)F", "/q"]);
+  restrictPrivatePath(directory, 0o700);
+  assertPrivatePermissions(directory, 0o700);
+  const file = path.join(directory, ".state.json.12345." + "z".repeat(36) + ".tmp");
+  fs.writeFileSync(file, "synthetic", { flag: "wx" });
+  execFileSync(tool, [path.toNamespacedPath(file), "/grant", "*S-1-1-0:R", "/q"]);
+  restrictPrivatePath(file, 0o600, { newFile: true });
+  assertPrivatePermissions(file, 0o600);
+  assert.equal(fs.readFileSync(file, "utf8"), "synthetic");
+});

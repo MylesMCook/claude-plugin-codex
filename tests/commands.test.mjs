@@ -84,7 +84,6 @@ console.error("unsupported"); process.exit(2);
     fs.rmSync(stateRoot, { recursive: true, force: true });
   });
   fs.chmodSync(stateRoot, 0o755);
-  const originalRootMode = fs.statSync(stateRoot).mode & 0o777;
   const stdout = execFileSync(process.execPath, [companion, "setup", "--json"], {
     env: { ...isolatedClaudeEnv(fake.dir, fake.bin), CLAUDE_COMPANION_STATE_ROOT: stateRoot },
     cwd: stateRoot,
@@ -114,7 +113,7 @@ console.error("unsupported"); process.exit(2);
   assert.equal(probe.args.includes("--strict-mcp-config"), true);
   assert.equal(probe.args.includes("--no-chrome"), true);
   assert.equal(probe.args.includes("--model"), false);
-  assert.equal(fs.statSync(stateRoot).mode & 0o777, originalRootMode);
+  assertPrivatePermissions(stateRoot, 0o700);
   const workspaceIndex = fs.readdirSync(stateRoot).find((entry) => entry.startsWith("claude-state-"));
   assert.ok(workspaceIndex);
   const indexDir = path.join(stateRoot, workspaceIndex);

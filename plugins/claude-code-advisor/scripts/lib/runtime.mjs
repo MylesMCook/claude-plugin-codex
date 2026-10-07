@@ -228,8 +228,8 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function assertSafeManagedDirectory(directory, label = "state directory", pathBoundary = path.dirname(directory)) {
-  const boundary = path.resolve(pathBoundary);
+function assertSafeManagedDirectory(directory, label = "state directory", pathBoundary) {
+  const boundary = path.resolve(pathBoundary ?? path.dirname(directory));
   const target = path.resolve(directory);
   const relative = path.relative(boundary, target);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -240,6 +240,9 @@ function assertSafeManagedDirectory(directory, label = "state directory", pathBo
   if (boundaryStat.isSymbolicLink() || !boundaryStat.isDirectory()) {
     throw new Error(`Refusing unsafe state boundary: ${boundary} must be a real directory, not a symlink.`);
   }
+  // Explicit boundaries are the configured advisor state root. Implicit
+  // parents can be shared directories and must retain their permissions.
+  if (pathBoundary != null) restrictPrivatePath(boundary, 0o700);
   let current = boundary;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     current = path.join(current, segment);

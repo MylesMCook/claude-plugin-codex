@@ -9,7 +9,10 @@ import { writeFakeClaude } from "./lib/fake-claude.mjs";
 // A forgotten per-fixture provider path fails closed at a nonexistent mock.
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-synthetic-suite-"));
 try {
-  const files = fs.readdirSync("tests").filter(name => name.endsWith(".test.mjs")).sort().map(name => path.join("tests", name));
+  const requested = process.argv.slice(2);
+  const files = requested.length ? requested : fs.readdirSync("tests").filter(name => name.endsWith(".test.mjs")).sort().map(name => path.join("tests", name));
+  if (!files.length || !files.every(file => path.dirname(path.resolve(file)) === path.resolve("tests")
+    && file.endsWith(".test.mjs") && fs.lstatSync(file).isFile())) throw new Error("Select existing repository test files.");
   let executable = process.execPath;
   let args = ["--test", "--test-concurrency=4", ...files];
   if (process.platform === "win32") {

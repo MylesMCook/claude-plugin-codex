@@ -68,20 +68,37 @@ class MockProvider {
     } finally { CloseHandle(snapshot); }
   }
 
+  [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
+  static extern uint GetNamedSecurityInfoW(string target, int objectType, uint information,
+    out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
+  [DllImport("advapi32.dll")]
+  static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
+  [DllImport("kernel32.dll")]
+  static extern IntPtr LocalFree(IntPtr memory);
+
   static void ReadAcl(string target) {
-    FileSystemSecurity acl = Directory.Exists(target)
-      ? (FileSystemSecurity)Directory.GetAccessControl(target, AccessControlSections.Access | AccessControlSections.Owner)
-      : File.GetAccessControl(target, AccessControlSections.Access | AccessControlSections.Owner);
-    var output = new StringBuilder("{\"protected\":").Append(acl.AreAccessRulesProtected ? "true" : "false")
+    IntPtr owner, group, dacl, sacl, descriptor;
+    uint error = GetNamedSecurityInfoW(target, 1, 5, out owner, out group, out dacl, out sacl, out descriptor);
+    if (error != 0) throw new System.ComponentModel.Win32Exception((int)error);
+    RawSecurityDescriptor acl;
+    try {
+      var bytes = new byte[GetSecurityDescriptorLength(descriptor)];
+      Marshal.Copy(descriptor, bytes, 0, bytes.Length);
+      acl = new RawSecurityDescriptor(bytes, 0);
+    } finally { LocalFree(descriptor); }
+    var output = new StringBuilder("{\"protected\":")
+      .Append((acl.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0 ? "true" : "false")
       .Append(",\"user\":\"").Append(WindowsIdentity.GetCurrent().User.Value)
-      .Append("\",\"owner\":\"").Append(acl.GetOwner(typeof(SecurityIdentifier)).Value).Append("\",\"entries\":[");
-    foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier))) {
+      .Append("\",\"owner\":\"").Append(acl.Owner.Value).Append("\",\"entries\":[");
+    foreach (GenericAce entry in acl.DiscretionaryAcl) {
+      var rule = entry as QualifiedAce;
       if (output[output.Length - 1] != '[') output.Append(",");
-      output.Append("{\"sid\":\"").Append(rule.IdentityReference.Value).Append("\",\"allow\":")
-        .Append(rule.AccessControlType == AccessControlType.Allow ? "true" : "false")
-        .Append(",\"rights\":").Append((int)rule.FileSystemRights)
-        .Append(",\"inheritance\":").Append((int)rule.InheritanceFlags)
-        .Append(",\"propagation\":").Append((int)rule.PropagationFlags).Append("}");
+      output.Append("{\"sid\":\"").Append(rule == null ? "unknown" : rule.SecurityIdentifier.Value)
+        .Append("\",\"allow\":")
+        .Append(rule != null && rule.AceQualifier == AceQualifier.AccessAllowed && !rule.IsCallback ? "true" : "false")
+        .Append(",\"rights\":").Append(rule == null ? 0 : rule.AccessMask)
+        .Append(",\"inheritance\":").Append((int)entry.AceFlags & 3)
+        .Append(",\"propagation\":").Append(((int)entry.AceFlags >> 2) & 3).Append("}");
     }
     Console.WriteLine(output.Append("]}"));
   }

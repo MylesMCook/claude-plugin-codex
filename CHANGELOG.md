@@ -2,6 +2,16 @@
 
 All notable public changes to Claude Code Advisor for Codex are recorded here.
 
+## 0.1.21 - 2026-10-07
+
+- support extended Windows paths for ownership and ACL inspection/replacement,
+  including long atomic state filenames and parent directories
+- protect an explicitly configured state root while preserving implicit parents
+- give the ACL-only PowerShell helper a disposable profile with existing folders
+  and no inherited provider credentials or caller configuration
+- reduce new-file ACL work without removing final readback; make Windows preflight
+  use the same isolated environment and process containment as full validation
+
 ## 0.1.20 - 2026-10-07
 
 - replace Windows state access rules without requiring restore privilege;

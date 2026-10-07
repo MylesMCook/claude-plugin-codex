@@ -5,10 +5,12 @@ import { execFileSync } from "node:child_process";
 
 const replaceAccessRulesScript = `
 $ErrorActionPreference = 'Stop'
+[AppContext]::SetSwitch('Switch.System.IO.UseLegacyPathHandling', $false)
+[AppContext]::SetSwitch('Switch.System.IO.BlockLongPaths', $false)
 $target = $env:CLAUDE_STATE_ACL_PATH
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $sections = [System.Security.AccessControl.AccessControlSections]::Access
-if ([System.IO.Directory]::Exists($target)) {
+if ($env:CLAUDE_STATE_ACL_DIRECTORY -eq "1") {
   $acl = New-Object System.Security.AccessControl.DirectorySecurity
   $acl.SetSecurityDescriptorSddlForm(('D:P(A;OICI;FA;;;' + $sid + ')(A;OICI;FA;;;SY)'), $sections)
   [System.IO.Directory]::SetAccessControl($target, $acl)
@@ -38,6 +40,7 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
   const stat = fs.lstatSync(target);
   if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw new Error("Refusing unsafe private state path.");
   if (process.platform !== "win32") { fs.chmodSync(target, mode); return; }
+  const nativeTarget = path.toNamespacedPath(path.resolve(target));
   const tools = path.join(process.env.SystemRoot, "System32");
   const options = { encoding: "utf8", windowsHide: true, timeout: 10000, stdio: ["ignore", "pipe", "pipe"] };
   const run = (name, args, stdoutFile = null) => {
@@ -65,27 +68,36 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
     // A token's default owner can be the Administrators group, even for an
     // exclusive new file. Normalize ownership before publishing any state.
     stage = "owner";
-    run("icacls.exe", [target, "/setowner", `*${userSid}`, "/q"]);
+    run("icacls.exe", [nativeTarget, "/setowner", `*${userSid}`, "/q"]);
     const replaceAcl = () => {
+      fs.mkdirSync(path.join(temporary, "AppData", "Roaming"), { recursive: true });
+      fs.mkdirSync(path.join(temporary, "AppData", "Local"), { recursive: true });
       stage = "replace";
       // Set only the DACL. icacls /restore requests a restore privilege that
       // ordinary Windows accounts lack, even when they own the managed file.
       execFileSync(path.join(tools, "WindowsPowerShell", "v1.0", "powershell.exe"), [
         "-NoProfile", "-NonInteractive", "-EncodedCommand",
         Buffer.from(replaceAccessRulesScript, "utf16le").toString("base64")
-      ], { ...options, stdio: "ignore", env: { ...process.env,
-        // Windows PowerShell needs the OS paths even when the caller uses an
-        // allowlisted environment. Keep its module search inside Windows.
-        windir: process.env.SystemRoot,
+      ], { ...options, stdio: "ignore", env: {
+        // ACL-only PowerShell gets a disposable profile with existing folders.
+        // Caller config and provider credentials never enter this child.
+        SystemRoot: process.env.SystemRoot, windir: process.env.SystemRoot,
         SystemDrive: path.parse(process.env.SystemRoot).root.replace(/[\\/]$/, ""),
+        PATH: tools,
+        USERPROFILE: temporary,
+        APPDATA: path.join(temporary, "AppData", "Roaming"),
+        LOCALAPPDATA: path.join(temporary, "AppData", "Local"),
+        TEMP: temporary, TMP: temporary,
         PSModulePath: path.join(tools, "WindowsPowerShell", "v1.0", "Modules"),
-        CLAUDE_STATE_ACL_PATH: target } });
+        CLAUDE_STATE_ACL_PATH: nativeTarget,
+        CLAUDE_STATE_ACL_DIRECTORY: stat.isDirectory() ? "1" : "0"
+      } });
     };
     const snapshot = path.join(temporary, "permissions.txt");
     const isPrivate = () => {
       stage = "inspect";
       if (fs.existsSync(snapshot)) fs.unlinkSync(snapshot);
-      run("icacls.exe", [target, "/save", snapshot, "/q"]);
+      run("icacls.exe", [nativeTarget, "/save", path.toNamespacedPath(snapshot), "/q"]);
       const dacl = fs.readFileSync(snapshot).toString("utf16le").split(/\r?\n/).find(line => line.startsWith("D:"));
       if (hasPrivateWindowsAcl(dacl, userSid, stat.isDirectory())) return true;
       // SDDL can abbreviate the current local administrator as LA. Accept an
@@ -95,7 +107,7 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
       if (!alias || !hasPrivateWindowsAcl(dacl, userSid, stat.isDirectory(), alias)) return false;
       const foundFile = path.join(temporary, "sid-match.txt");
       const fd = fs.openSync(foundFile, "w");
-      try { run("icacls.exe", [target, "/findsid", `*${userSid}`, "/q"], fd); }
+      try { run("icacls.exe", [nativeTarget, "/findsid", `*${userSid}`, "/q"], fd); }
       finally { fs.closeSync(fd); }
       const expected = `\\${path.basename(target)}`.toLowerCase();
       return fs.readFileSync(foundFile, "utf8").split(/\r?\n/).some(line => {
@@ -103,10 +115,10 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
         return text.endsWith(expected) || text.endsWith(`${expected}.`);
       });
     };
-    if (isPrivate()) return;
+    if (!newFile && isPrivate()) return;
     const inheritance = stat.isDirectory() ? "(OI)(CI)" : "";
     stage = "restrict";
-    run("icacls.exe", [target, "/inheritance:r", "/grant:r", `*${userSid}:${inheritance}F`, `*S-1-5-18:${inheritance}F`, "/q"]);
+    run("icacls.exe", [nativeTarget, "/inheritance:r", "/grant:r", `*${userSid}:${inheritance}F`, `*S-1-5-18:${inheritance}F`, "/q"]);
     if (isPrivate()) return;
     // Replace only this managed object's protected DACL. Existing
     // explicit foreign grants must be removed, not merely supplemented.

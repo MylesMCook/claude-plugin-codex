@@ -48,7 +48,7 @@ jobs:
           package-manager-cache: false
       - if: runner.os == 'Windows'
         run: |
-          node --test tests/private-path.test.mjs
+          node tests/run-synthetic.mjs tests/private-path.test.mjs
           node --test --test-name-pattern "native mock forwards|native Windows process inspection" tests/windows-provider.test.mjs
       - if: ${{ !inputs.windows_probe_only }}
         run: npm run validate

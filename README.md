@@ -27,7 +27,7 @@ codex plugin marketplace add MylesMCook/claude-plugin-codex
 codex plugin add claude-code-advisor@claude-plugin-codex
 ```
 
-This fork publishes version 0.1.20. Start a new Codex thread after installation
+This fork publishes version 0.1.21. Start a new Codex thread after installation
 to load the updated skill.
 Use `$claude ux --billing-source subscription <question>` after approving the
 exact context to send. Install Anthropic's official `frontend-design` Claude
@@ -84,7 +84,7 @@ Alpha. Use it on real work only with normal review and source-control controls.
 The stable command form is `$claude`. If your Codex UI exposes the skill as
 `/claude`, you can use that as an alias.
 
-Current public release: [`v0.1.20`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.20).
+Current public release: [`v0.1.21`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.21).
 
 | Component | Verification scope |
 |---|---|
@@ -104,7 +104,7 @@ evidence remains incomplete for WSL. See [platform verification](docs/windows-ve
 for this fork's full Windows run and authenticated Mac routing.
 
 If you already use Codex and authenticated Claude Code and choose to test
-`v0.1.20`, run `$claude setup` and one foreground `$claude review` in a public,
+`v0.1.21`, run `$claude setup` and one foreground `$claude review` in a public,
 disposable or otherwise non-sensitive repository. You may then submit an
 [optional structured alpha test report](https://github.com/MylesMCook/claude-plugin-codex/issues/new?template=alpha_test_report.yml).
 See the [alpha testing guide](docs/alpha-testing.md) for the optional check and
