@@ -48,6 +48,7 @@ jobs:
           package-manager-cache: false
       - if: runner.os == 'Windows'
         run: |
+          node tests/run-synthetic.mjs tests/acl-startup-diagnostic.test.mjs
           node tests/run-synthetic.mjs tests/private-path.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test --test-name-pattern "native mock forwards|native Windows process inspection" tests/windows-provider.test.mjs
