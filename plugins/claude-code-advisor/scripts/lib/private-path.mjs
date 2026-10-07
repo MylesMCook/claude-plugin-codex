@@ -11,11 +11,11 @@ $target = $env:CLAUDE_STATE_ACL_PATH
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $sections = [System.Security.AccessControl.AccessControlSections]::Access
 if ($env:CLAUDE_STATE_ACL_DIRECTORY -eq "1") {
-  $acl = New-Object System.Security.AccessControl.DirectorySecurity
+  $acl = [System.Security.AccessControl.DirectorySecurity]::new()
   $acl.SetSecurityDescriptorSddlForm(('D:P(A;OICI;FA;;;' + $sid + ')(A;OICI;FA;;;SY)'), $sections)
   [System.IO.Directory]::SetAccessControl($target, $acl)
 } else {
-  $acl = New-Object System.Security.AccessControl.FileSecurity
+  $acl = [System.Security.AccessControl.FileSecurity]::new()
   $acl.SetSecurityDescriptorSddlForm(('D:P(A;;FA;;;' + $sid + ')(A;;FA;;;SY)'), $sections)
   [System.IO.File]::SetAccessControl($target, $acl)
 }`;
