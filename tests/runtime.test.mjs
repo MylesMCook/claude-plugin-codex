@@ -1,6 +1,7 @@
 import { assertPrivatePermissions, createRedirect } from "./lib/permissions.mjs";
+import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
 import assert from "node:assert/strict";
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawnSync, fork } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1673,4 +1674,49 @@ test("unsupported-link lock fallback cleans an incomplete owner record", t => {
   } finally { fs.linkSync = link; fs.openSync = open; fs.writeFileSync = write; }
   assert.equal(fs.readdirSync(stateDir).some(name => name.endsWith(".tmp") || name === ".state.lock"), false);
   assert.doesNotThrow(() => saveState(stateDir, emptyState(), { lockTimeoutMs: 20 }));
+});
+
+
+test("Windows state publication recovers when an old reader briefly holds the file", async t => {
+  if (process.platform !== "win32") { t.skip("Requires Windows sharing semantics"); return; }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-reader-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, "state"), file = path.join(dir, "state.json");
+  saveState(dir, { ...emptyState(), jobs: [{ id: "before", status: "completed" }] });
+  const worker = path.join(root, "reader.cjs");
+  fs.writeFileSync(worker, `const fs=require('node:fs');const fd=fs.openSync(process.argv[2],'r');process.send('ready');process.on('message',()=>setTimeout(()=>{const state=JSON.parse(fs.readFileSync(fd,'utf8'));fs.closeSync(fd);process.send(state.jobs.map(j=>j.id));process.disconnect();},250));`);
+  const child = fork(worker, [file], { env: isolatedClaudeEnv(root), stdio: ["ignore", "ignore", "ignore", "ipc"] });
+  t.after(() => child.kill());
+  const message = () => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("owned reader timeout")), 10000);
+    child.once("message", value => { clearTimeout(timer); resolve(value); });
+  });
+  assert.equal(await message(), "ready");
+  const released = message();
+  transactState(dir, state => ({ ...state, jobs: [...state.jobs, { id: "after", status: "completed" }] }), {
+    beforeRename: () => child.send("release")
+  });
+  assert.deepEqual(await released, ["before"]);
+  assert.deepEqual(loadState(dir).jobs.map(j=>j.id).sort(), ["after", "before"]);
+  assertPrivatePermissions(file, 0o600);
+  assert.equal(fs.readdirSync(dir).some(name => name.endsWith(".tmp") || name === ".state.lock"), false);
+});
+
+test("permanent rename denial preserves the original state and cleans prepared files", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-state-rename-denied-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, "state"), file = path.join(dir, "state.json");
+  saveState(dir, { ...emptyState(), jobs: [{ id: "before", status: "completed" }] });
+  const before = fs.readFileSync(file), rename = fs.renameSync;
+  let started, lastAttempt;
+  try {
+    fs.renameSync = () => { lastAttempt = Date.now(); throw Object.assign(new Error("permanent rename denial"), { code: "EPERM" }); };
+    assert.throws(() => saveState(dir, emptyState(), { beforeRename: () => { started = Date.now(); } }), /permanent rename denial/);
+  } finally { fs.renameSync = rename; }
+  const elapsed = lastAttempt - started;
+  assert.ok(elapsed < 2000, "one-second sharing retry must remain bounded");
+  if (process.platform === "win32") assert.ok(elapsed >= 1000);
+  assert.deepEqual(fs.readFileSync(file), before);
+  assertPrivatePermissions(file, 0o600);
+  assert.equal(fs.readdirSync(dir).some(name => name.endsWith(".tmp") || name === ".state.lock"), false);
 });

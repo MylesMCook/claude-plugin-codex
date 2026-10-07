@@ -4,6 +4,9 @@ All notable public changes to Claude Code Advisor for Codex are recorded here.
 
 ## 0.1.21 - 2026-10-07
 
+- retry transient Windows file-sharing errors for at most one second while
+  preserving private state and cleaning up safely after permanent denial
+
 - prepare private lock/state files before acquiring the state lock, keeping
   concurrent writers within the existing wait without caching ACL approval
 - construct ACLs directly through .NET so repair avoids PowerShell module autoload

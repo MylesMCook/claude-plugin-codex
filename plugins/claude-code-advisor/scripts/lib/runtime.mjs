@@ -416,10 +416,10 @@ function acquireFileLock(lockFile, timeoutMs = DEFAULT_STATE_LOCK_TIMEOUT_MS) {
           if (error?.code !== "EEXIST" || claimed) throw error;
           try { assertSafeRegularFile(lockFile, "state lock", { allowMissing: false }); }
           catch (lockError) { if (lockError?.code === "ENOENT") continue; throw lockError; }
-          let existing = null;
-          try { existing = JSON.parse(fs.readFileSync(lockFile, "utf8")); }
-          catch { /* A malformed lock is not safe to break. */ }
           if (Date.now() - startedAt >= timeoutMs) {
+            let existing = null;
+            try { existing = JSON.parse(fs.readFileSync(lockFile, "utf8")); }
+            catch { /* A malformed lock is not safe to break. */ }
             const staleHint = lockOwnerAlive(existing) === false
               ? " The recorded owner is not running; verify no process owns the lock, then remove that one stale lock manually."
               : "";
@@ -485,8 +485,17 @@ function atomicWritePrivateFile(file, content, prepared, options = {}) {
   fs.fsyncSync(prepared.fd);
   prepared.close();
   options.beforeRename?.({ file, tempFile: prepared.tempFile });
-  assertSafeRegularFile(file, path.basename(file));
-  fs.renameSync(prepared.tempFile, file);
+  const deadline = Date.now() + 1000;
+  while (true) {
+    assertSafeRegularFile(file, path.basename(file));
+    try { fs.renameSync(prepared.tempFile, file); break; }
+    catch (error) {
+      // Windows readers can briefly deny replacement of the old inode. Keep
+      // the private candidate and state lock while waiting, then fail bounded.
+      if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(error?.code) || Date.now() >= deadline) throw error;
+      sleepSync(10);
+    }
+  }
   fsyncDirectory(path.dirname(file));
 }
 
