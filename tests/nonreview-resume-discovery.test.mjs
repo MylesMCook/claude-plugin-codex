@@ -242,6 +242,7 @@ for (const kind of ["advise", "do", "rescue"]) {
     const f = fixture(t);
     const first = f.invoke([kind, "Synthetic marker cedar-472", "--output-format", "json"]);
     assert.equal(first.status, 0, first.stderr);
+    assert.deepEqual(JSON.parse(JSON.parse(first.stdout).output), { type: "result", subtype: "success", is_error: false, session_id: sessionId, result: "Synthetic continuation" });
     const source = f.jobs().find(item => item.id === JSON.parse(first.stdout).jobId);
     assert.equal(source.resumeSessionId, sessionId);
     assert.equal(source.canonicalSessionId, sessionId);

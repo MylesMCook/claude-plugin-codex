@@ -823,10 +823,10 @@ async function runForeground(ctx, kind, prompt, options = {}) {
   }
   const status = result.status === 0 ? "completed" : "failed";
   const failedForMaxTurns = result.status !== 0 && isMaxTurnLimitOutput(`${result.stdout}\n${result.stderr}`);
-  let validatedResume = null;
+  let validatedResult = null;
   if (result.status === 0 && providerOutputFormat === "json") {
     try {
-      validatedResume = validateSupervisedClaudeResult(result.stdout, resumeSessionId);
+      validatedResult = validateSupervisedClaudeResult(result.stdout, resumeSessionId);
     } catch {
       const failed = completeJob(ctx, job, {
         status: "failed",
@@ -840,18 +840,18 @@ async function runForeground(ctx, kind, prompt, options = {}) {
   result.stderr = result.stderr.toString("utf8");
   const completed = completeJob(ctx, job, {
     status,
-    resumeSessionId: validatedResume?.sessionId || resumeSessionId,
-    canonicalSessionId: validatedResume?.sessionId,
-    resultSource: validatedResume ? "provider-json" : undefined,
-    resultState: validatedResume ? "available" : undefined,
-    resultAuthoritativeAt: validatedResume ? new Date().toISOString() : undefined,
+    resumeSessionId: validatedResult?.sessionId || resumeSessionId,
+    canonicalSessionId: validatedResult?.sessionId,
+    resultSource: validatedResult ? "provider-json" : undefined,
+    resultState: validatedResult ? "available" : undefined,
+    resultAuthoritativeAt: validatedResult ? new Date().toISOString() : undefined,
     failureDiagnostic: result.status === 0
       ? null
       : failedForMaxTurns
         ? "Claude hit the max-turn limit."
         : `Claude command returned non-zero status ${result.status}.`,
     result: result.status === 0
-      ? validatedResume?.result ?? result.stdout.trim()
+      ? (resumeSessionId ? validatedResult?.result : null) ?? result.stdout.trim()
       : failedForMaxTurns
         ? "Claude hit the max-turn limit. Rerun with `--max-turns <higher>` or narrow the task."
         : `Claude command failed with status ${result.status}.`
