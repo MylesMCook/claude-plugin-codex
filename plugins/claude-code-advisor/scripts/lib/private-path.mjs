@@ -3,6 +3,21 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+const replaceAccessRulesScript = `
+$ErrorActionPreference = 'Stop'
+$target = $env:CLAUDE_STATE_ACL_PATH
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$sections = [System.Security.AccessControl.AccessControlSections]::Access
+if ([System.IO.Directory]::Exists($target)) {
+  $acl = New-Object System.Security.AccessControl.DirectorySecurity
+  $acl.SetSecurityDescriptorSddlForm(('D:P(A;OICI;FA;;;' + $sid + ')(A;OICI;FA;;;SY)'), $sections)
+  [System.IO.Directory]::SetAccessControl($target, $acl)
+} else {
+  $acl = New-Object System.Security.AccessControl.FileSecurity
+  $acl.SetSecurityDescriptorSddlForm(('D:P(A;;FA;;;' + $sid + ')(A;;FA;;;SY)'), $sections)
+  [System.IO.File]::SetAccessControl($target, $acl)
+}`;
+
 let userSid;
 export function parseWindowsUserSid(csv) {
   return String(csv || "").match(/,"(S-1-\d+(?:-\d+)+)"\s*$/)?.[1] || null;
@@ -52,15 +67,20 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
     stage = "owner";
     run("icacls.exe", [target, "/setowner", `*${userSid}`, "/q"]);
     const replaceAcl = () => {
-      const name = path.basename(target);
-      if (!name || /[\r\n]/.test(name)) throw new Error("Unsafe private ACL restore path.");
-      const flags = stat.isDirectory() ? "OICI" : "";
-      const backup = path.join(temporary, "private-acl.txt");
-      fs.writeFileSync(backup, Buffer.from(`\ufeff${name}\r\nD:P(A;${flags};FA;;;${userSid})(A;${flags};FA;;;SY)\r\n`, "utf16le"));
       stage = "replace";
-      run("icacls.exe", [path.dirname(target), "/restore", backup, "/q"]);
+      // Set only the DACL. icacls /restore requests a restore privilege that
+      // ordinary Windows accounts lack, even when they own the managed file.
+      execFileSync(path.join(tools, "WindowsPowerShell", "v1.0", "powershell.exe"), [
+        "-NoProfile", "-NonInteractive", "-EncodedCommand",
+        Buffer.from(replaceAccessRulesScript, "utf16le").toString("base64")
+      ], { ...options, stdio: "ignore", env: { ...process.env,
+        // Windows PowerShell needs the OS paths even when the caller uses an
+        // allowlisted environment. Keep its module search inside Windows.
+        windir: process.env.SystemRoot,
+        SystemDrive: path.parse(process.env.SystemRoot).root.replace(/[\\/]$/, ""),
+        PSModulePath: path.join(tools, "WindowsPowerShell", "v1.0", "Modules"),
+        CLAUDE_STATE_ACL_PATH: target } });
     };
-    if (newFile) { replaceAcl(); return; }
     const snapshot = path.join(temporary, "permissions.txt");
     const isPrivate = () => {
       stage = "inspect";
@@ -88,7 +108,7 @@ export function restrictPrivatePath(target, mode, { newFile = false } = {}) {
     stage = "restrict";
     run("icacls.exe", [target, "/inheritance:r", "/grant:r", `*${userSid}:${inheritance}F`, `*S-1-5-18:${inheritance}F`, "/q"]);
     if (isPrivate()) return;
-    // Restore only this one managed object's exact protected DACL. Existing
+    // Replace only this managed object's protected DACL. Existing
     // explicit foreign grants must be removed, not merely supplemented.
     replaceAcl();
     if (!isPrivate()) throw new Error("Private state ACL verification failed.");

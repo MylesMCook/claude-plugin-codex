@@ -2,6 +2,14 @@
 
 All notable public changes to Claude Code Advisor for Codex are recorded here.
 
+## 0.1.20 - 2026-10-07
+
+- replace Windows state access rules without requiring restore privilege;
+  retain ownership, strict private ACL readback and the native fast path
+- validate fresh foreground JSON advice and preserve exact session identity for
+  continuation, with raw-byte rejection of malformed or ambiguous provider results
+- keep failed results non-resumable and preserve existing read-only authority checks
+
 ## 0.1.19 - 2026-10-06
 
 - discover the native Claude executable bundled by Windows npm installations,

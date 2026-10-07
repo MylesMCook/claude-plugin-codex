@@ -95,6 +95,9 @@ commands. The guaranteed Codex surface is the `$claude` skill mention.
   max-turn limit, rerun with `--max-turns <higher>` or narrow the task.
 - Do not auto-resume a Claude job when the companion says explicit selection
   is required.
+- For foreground advice that will need continuation, pass `--output-format json`.
+  Successful fresh JSON results acquire validated session identity. Text advice
+  does not. Continue through `rescue --resume --job-id <job-id>`.
 - Resume only through the companion's canonical full Claude session UUID.
   Plugin job IDs and supervisor lifecycle IDs are never passed to `--resume`.
   The UUID must come from a validated provider JSON result, and a resumed result

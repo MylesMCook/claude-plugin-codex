@@ -31,6 +31,7 @@ const fs = require("node:fs");
 fs.readFileSync(0);
 fs.appendFileSync(${JSON.stringify(invocationLog)}, JSON.stringify(process.argv.slice(2)) + "\\n");
 if (process.env.SYNTHETIC_PROVIDER_FAIL === "1") process.exit(1);
+if (process.env.SYNTHETIC_RAW_RESULT) { process.stdout.write(Buffer.from(process.env.SYNTHETIC_RAW_RESULT, "base64")); process.exit(0); }
 process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: false,
   session_id: ${JSON.stringify(sessionId)}, result: "Synthetic continuation" }));
 `, { mode: 0o755 });
@@ -235,3 +236,45 @@ test("non-review discovery and resolution preserve explicit write authority", (t
   assert.equal(f.jobs()[0].write, true);
   assert.deepEqual(f.jobs().find((candidate) => candidate.id === selected.id), selected);
 });
+
+for (const kind of ["advise", "do", "rescue"]) {
+  test(`${kind} fresh JSON result establishes exact read-only continuation`, (t) => {
+    const f = fixture(t);
+    const first = f.invoke([kind, "Synthetic marker cedar-472", "--output-format", "json"]);
+    assert.equal(first.status, 0, first.stderr);
+    const source = f.jobs().find(item => item.id === JSON.parse(first.stdout).jobId);
+    assert.equal(source.resumeSessionId, sessionId);
+    assert.equal(source.canonicalSessionId, sessionId);
+    assert.equal(source.resultSource, "provider-json");
+    assert.equal(source.resultState, "available");
+    assert.ok(source.resultAuthoritativeAt);
+    assert.equal(source.write, false);
+    const next = f.invoke(["rescue", "Synthetic follow-up", "--resume", "--job-id", source.id]);
+    assert.equal(next.status, 0, next.stderr);
+    const args = f.invocations().at(-1);
+    assert.equal(args[args.indexOf("--resume") + 1], sessionId);
+    assert.equal(args[args.indexOf("--permission-mode") + 1], "plan");
+  });
+}
+
+const envelope = { type: "result", subtype: "success", is_error: false, session_id: sessionId, result: "Synthetic completion" };
+for (const [name, bytes] of [
+  ["malformed", Buffer.from("not JSON")],
+  ["unsuccessful", Buffer.from(JSON.stringify({ ...envelope, is_error: true }))],
+  ["missing identity", Buffer.from(JSON.stringify({ ...envelope, session_id: undefined }))],
+  ["ambiguous identity", Buffer.from(JSON.stringify(envelope).replace('"session_id":', `"session_id":"${sessionId}","session_id":`))],
+  ["multiple documents", Buffer.from(JSON.stringify(envelope) + JSON.stringify(envelope))],
+  ["invalid UTF-8", Buffer.concat([Buffer.from(JSON.stringify(envelope).replace("Synthetic completion", "" ).slice(0, -2)), Buffer.from([0xff]), Buffer.from('"}')])]
+]) {
+  test(`fresh JSON advice rejects ${name} without resume authority`, (t) => {
+    const f = fixture(t);
+    const response = f.invoke(["advise", "Synthetic task", "--output-format", "json"], { environment: { SYNTHETIC_RAW_RESULT: bytes.toString("base64") } });
+    assert.equal(response.status, 1, response.stdout);
+    const failed = f.jobs().find(item => item.id === JSON.parse(response.stdout).jobId);
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.resumeSessionId, undefined);
+    assert.equal(failed.canonicalSessionId, undefined);
+    assert.equal(failed.resultSource, undefined);
+    reject(f, ["rescue", "Synthetic follow-up", "--resume", "--job-id", failed.id]);
+  });
+}

@@ -764,7 +764,7 @@ async function runForeground(ctx, kind, prompt, options = {}) {
     result = runClaude(args, {
       cwd: ctx.cwd,
       input: prompt,
-      rawOutput: isReview,
+      rawOutput: isReview || providerOutputFormat === "json",
       killSignal: kind === "ux" ? "SIGKILL" : "SIGTERM",
       timeoutMs: Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)
     });
@@ -824,18 +824,20 @@ async function runForeground(ctx, kind, prompt, options = {}) {
   const status = result.status === 0 ? "completed" : "failed";
   const failedForMaxTurns = result.status !== 0 && isMaxTurnLimitOutput(`${result.stdout}\n${result.stderr}`);
   let validatedResume = null;
-  if (result.status === 0 && resumeSessionId) {
+  if (result.status === 0 && providerOutputFormat === "json") {
     try {
-      validatedResume = validateSupervisedClaudeResult(Buffer.from(result.stdout, "utf8"), resumeSessionId);
+      validatedResume = validateSupervisedClaudeResult(result.stdout, resumeSessionId);
     } catch {
       const failed = completeJob(ctx, job, {
         status: "failed",
-        failureDiagnostic: "Claude returned an invalid resumed result envelope.",
-        result: "Claude returned an invalid resumed result envelope."
+        failureDiagnostic: resumeSessionId ? "Claude returned an invalid resumed result envelope." : "Claude returned an invalid JSON result envelope.",
+        result: resumeSessionId ? "Claude returned an invalid resumed result envelope." : "Claude returned an invalid JSON result envelope."
       });
       return { ...failed, stdout: "", stderr: "" };
     }
   }
+  result.stdout = result.stdout.toString("utf8");
+  result.stderr = result.stderr.toString("utf8");
   const completed = completeJob(ctx, job, {
     status,
     resumeSessionId: validatedResume?.sessionId || resumeSessionId,
