@@ -4,7 +4,7 @@ Objective: fix 0.1.20 setup/advice/review failure at 285-character Windows paths
 protect the explicit state root, and publish after verification.
 Owner: Codex on mac-mini; primary source checkout
 `/Users/mylescook/Code/MylesMCook/claude-plugin-codex`,
-branch `codex/windows-long-path-state`, base `76e2d80`.
+branch `main`; completed runtime `278fdd1`, base `76e2d80`.
 User authorized publication after the fixes work on October 7, 2026.
 
 Accepted outcomes: private long-path directory/file creation; atomic state
@@ -17,8 +17,7 @@ Implemented: namespaced native ACL paths; explicit-root protection; isolated
 PowerShell helper with direct .NET ACL construction; strict final ACL readback;
 private state/lock preparation outside the critical section; exclusive hard-link
 lock claim with unsupported-filesystem fallback and partial-write cleanup;
-LF plugin attributes; Windows CI preflight failure propagation. Candidate
-`6c1602d` is pushed. Subsequent local sharing fix retries transient Windows rename
+LF plugin attributes; Windows CI preflight failure propagation. Released runtime `278fdd1` includes the sharing fix, which retries transient Windows rename
 errors for one second and reads lock-owner hints only when the wait expires.
 
 Failing-before evidence: native 325-character ownership path exits3, namespaced
@@ -43,11 +42,21 @@ the seed helper prepared private children without protecting its explicit root.
 Repairing that root then triggered the test no-provider-execution guard. Seed
 now uses the actual explicit boundary before readback; guard remains unchanged.
 
-Sharing patch: Mac runtime92pass/1Windows skip; physical Windows held-reader and
-permanent-denial regressions2/2 pass. An initial new test had a missing fixture
-import, now fixed. Final full CI and package receipts remain required.
+Final checks: Mac validate804pass/9platform skips; physical Windows runtime93/93
+and guarded readback98/98 pass. Hosted Windows validate769pass/36platform skips.
+All six source jobs pass in run37659216404 at exact release runtime278fdd1.
+An initial new test had a missing fixture import, now fixed. Fresh native
+Windows main installation uses ordinary Git settings and matches all12 bytes.
 Evidence: `/Users/mylescook/Documents/Codex/2026-10-07-claude-advisor-long-paths`.
 
-Next: final checks, land/tag/release0.1.21, pin exact runtime SHA in the canonical
-marketplace and verify fresh Git catalog visibility. Preserve all36 unrelated
-marketplace files. No credential/cache/global configuration changes or elevation.
+Published alpha v0.1.21 at `278fdd1965b498e52f1201742141156f4b02fbbf`.
+Canonical marketplace `6a13ee9aade32cb9ce8379bf65b3ced16c347194` pins that SHA;
+all three marketplace jobs pass in run37661018087. Fresh canonical Git-backed
+installation confirms version, pin and all12 installed bytes. All36 unrelated
+marketplace files remain unchanged. No live cache edits, credential/global
+configuration changes or elevation. User owns refreshing their installation.
+
+Release: https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.21
+Full source CI: https://github.com/MylesMCook/claude-plugin-codex/actions/runs/37659216404
+Marketplace CI: https://github.com/MylesMCook/mcook-plugins/actions/runs/37661018087
+Detailed local evidence and release-receipt.json are in the evidence folder above.
