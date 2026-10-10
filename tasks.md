@@ -34,3 +34,8 @@ source release, updates the pinned marketplace entry and verifies published
 visibility. User owns active installation. Previous v0.1.21 Windows/runtime
 release was verified at base 278fdd1; details remain in the repository changelog,
 docs/windows-verification.md and GitHub release v0.1.21.
+
+
+Windows release gate follow-up: initial CI attempt stalled at the 20-minute harness deadline before full-suite results. One unchanged retry executed 807 tests: 770 passed, 36 platform skips, one failure. The failure was exact licence parity: root LICENSE checked out as CRLF while the package subtree was pinned to LF. The original licence text and committed content were identical.
+
+Fixed only the root LICENSE checkout attribute to LF. A core.autocrlf=true checkout reproduced the mismatch before and exact original-byte parity after. Both packaging regressions and native metadata validation pass with assertions unchanged. Runtime and package content remain unchanged from f7b45a5. Next: push this follow-up, require the new source CI green, then tag 0.1.22 and update the marketplace pin to the validated commit.
