@@ -1,6 +1,6 @@
 {
   "name": "claude-code-advisor",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Bring local Claude Code into Codex for reviews, prepared tasks, advice, and rescue work.",
   "author": {
     "name": "Yanchuk and contributors"
@@ -37,8 +37,8 @@
       "Do a prepared task or rescue this work with Claude Code."
     ],
     "brandColor": "#D97706",
-    "composerIcon": "./assets/icon.svg",
-    "logo": "./assets/logo.svg",
+    "composerIcon": "./com.openai/assets/icon.svg",
+    "logo": "./com.openai/assets/logo.svg",
     "screenshots": []
   }
 }

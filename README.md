@@ -27,7 +27,7 @@ codex plugin marketplace add MylesMCook/claude-plugin-codex
 codex plugin add claude-code-advisor@claude-plugin-codex
 ```
 
-This fork publishes version 0.1.21. Start a new Codex thread after installation
+This fork publishes version 0.1.22. Start a new Codex thread after installation
 to load the updated skill.
 Use `$claude ux --billing-source subscription <question>` after approving the
 exact context to send. Install Anthropic's official `frontend-design` Claude
@@ -78,13 +78,21 @@ This is the inverse of
 plugin pulls Codex into Claude Code. This one pulls local Claude Code into
 Codex.
 
+## Package conformance
+
+The [installed package README](plugins/claude-code-advisor/README.md) records the
+Agent Plugins 1.0.0 portable core, OpenAI compatibility layer and client limits.
+The portable core conforms without a native-only packaging exception. Legacy
+OpenAI compatibility artifacts are documented separately. The workflow
+still targets Codex and the existing local Claude Code CLI.
+
 ## Status and compatibility
 
 Alpha. Use it on real work only with normal review and source-control controls.
 The stable command form is `$claude`. If your Codex UI exposes the skill as
 `/claude`, you can use that as an alias.
 
-Current public release: [`v0.1.21`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.21).
+Current public release: [`v0.1.22`](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.22).
 
 | Component | Verification scope |
 |---|---|
@@ -104,7 +112,7 @@ evidence remains incomplete for WSL. See [platform verification](docs/windows-ve
 for this fork's full Windows run and authenticated Mac routing.
 
 If you already use Codex and authenticated Claude Code and choose to test
-`v0.1.21`, run `$claude setup` and one foreground `$claude review` in a public,
+`v0.1.22`, run `$claude setup` and one foreground `$claude review` in a public,
 disposable or otherwise non-sensitive repository. You may then submit an
 [optional structured alpha test report](https://github.com/MylesMCook/claude-plugin-codex/issues/new?template=alpha_test_report.yml).
 See the [alpha testing guide](docs/alpha-testing.md) for the optional check and
@@ -406,6 +414,18 @@ compatible version managers, and CI also checks Node.js 20 and 22 compatibility.
 npm test
 npm run validate
 ```
+
+Optional packaging ingestion check with the installed Codex CLI:
+
+```bash
+npm run test:install:codex
+```
+
+This installs a native-overlay fixture and a portable-only fixture in separate
+disposable Codex homes, verifies every installed byte and checks fixed skill
+discovery. It uses an isolated environment without credentials and calls no
+model or provider. It establishes CLI ingestion, not model-driven skill
+activation or authenticated workflow behavior.
 
 Optional smoke test against the installed Claude CLI:
 

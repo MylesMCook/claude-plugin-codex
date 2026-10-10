@@ -58,7 +58,8 @@ commands. The guaranteed Codex surface is the `$claude` skill mention.
 
 - Always call the bundled companion at `<plugin root>/scripts/claude-companion.mjs`
   using an absolute path. The plugin root is the `claude-code-advisor`
-  directory that contains `.codex-plugin/`, `skills/`, and `scripts/`.
+  directory that contains `plugin.json` (or legacy `.codex-plugin/`), `skills/`,
+  and `scripts/`.
 - Do not call `claude` directly from the skill instructions.
 - Return a concise human summary unless the user asks for raw JSON.
 - Review and adversarial-review are read-only.

@@ -1,62 +1,36 @@
-# Windows state repair and release 0.1.21
+# Agent Plugins packaging conformance, candidate 0.1.22
 
-Objective: fix 0.1.20 setup/advice/review failure at 285-character Windows paths,
-protect the explicit state root, and publish after verification.
-Owner: Codex on mac-mini; primary source checkout
-`/Users/mylescook/Code/MylesMCook/claude-plugin-codex`,
-branch `main`; completed runtime `278fdd1`, base `76e2d80`.
-User authorized publication after the fixes work on October 7, 2026.
+Objective: make Claude Code Advisor conform where possible and release through
+its existing standalone source and marketplace pin. Owner: Codex on mac-mini;
+isolated implementation checkout `/private/tmp/mcook-portable-fixes.WNpgg0/advisor`,
+branch `main`, base `278fdd1965b498e52f1201742141156f4b02fbbf`. The current user
+requested fixes and “git it out”; the primary agent owns commits and publication.
 
-Accepted outcomes: private long-path directory/file creation; atomic state
-publication and interruption recovery; explicit-root privacy without changing
-implicit parents; concurrent updates without data loss; real setup, JSON advice,
-exact-session marker recall and structured review. Preserve permission checks,
-existing provider/lock deadlines and unrelated checkouts. User owns installation.
+Implemented, uncommitted: portable `plugins/claude-code-advisor/plugin.json` with
+fixed skill discovery and `extensions.com.openai.interface`; matching native
+manifest and package version 0.1.22; package-local README/CHANGELOG and unchanged
+original MIT licence. Portable packaging needs no native-only exception. The
+workflow still targets Codex. The skill now recognizes a root portable manifest
+or the legacy native manifest; runtime, auth and permission contracts are unchanged.
+New packaging tests enforce identity/version/interface alignment, contained
+assets, discovered skill and installed licence/documentation.
 
-Implemented: namespaced native ACL paths; explicit-root protection; isolated
-PowerShell helper with direct .NET ACL construction; strict final ACL readback;
-private state/lock preparation outside the critical section; exclusive hard-link
-lock claim with unsupported-filesystem fallback and partial-write cleanup;
-LF plugin attributes; Windows CI preflight failure propagation. Released runtime `278fdd1` includes the sharing fix, which retries transient Windows rename
-errors for one second and reads lock-owner hints only when the wait expires.
+Verified: both packaging regressions failed before (missing portable manifest
+and installed licence), then 2/2 passed. Bundled Agent Plugins validator passed
+with zero warnings using cached jsonschema 4.26.0; skill quick validation passed
+using cached PyYAML 6.0.3; `node tests/validate-plugin.mjs` passed. Codex CLI
+0.162.1 `npm run test:install:codex` passed overlay and portable-only disposable
+fixtures, respectively 16 and 15 exact installed files and stable skill discovery.
+It uses an allowlisted credential-free environment and calls no provider/model.
+The final package moves client-specific icons into `com.openai/assets/`. The new namespace assertion failed before and passes after; exact candidate metadata and both ingestion modes pass. Diff whitespace checks pass.
 
-Failing-before evidence: native 325-character ownership path exits3, namespaced
-path succeeds; explicit root remains0755; isolated PowerShell `New-Object` hangs;
-16 Windows writers exceed fixture lock wait; held old state reader causes EPERM.
-Claude consulted twice read-only through the installed advisor using configured
-model and xhigh. Its held-reader suggestion exposed the last confirmed defect;
-it found no confirmed CLI invocation blocker. Optional Plan-mode observations
-are outside this repair; existing read-only authority remains unchanged.
+Restricted `npm run validate` failed on sandbox socket/process restrictions; that runner exited. The supported host-permission rerun passed 806 checks with 9 platform-specific skips and zero failures. The exact final candidate rerun also passed 806 checks with 9 platform-specific skips, zero failures, and native metadata validation. OpenAI plugin-creator validator script is absent; source metadata
+validation and actual CLI ingestion passed instead. Live `test:e2e:codex` is
+unrun: it always invokes real Codex exec and Claude setup/advice. Default smoke passed with Claude Code 2.1.293 and intentionally skipped authenticated background calls. Authenticated background smoke needs explicit opt-in.
+No fresh model activation or authenticated provider result is claimed. Packaging-only changes now use candidate ingestion as their local gate; existing live routing tests remain required for changes to workflow execution and provider routing. Legacy native compatibility artifacts are documented outside the portable conformance claim.
 
-Verified on 6c1602d: Mac validate803pass/8platform skips; physical Windows
-validate767pass/36platform skips, no failures. Windows runtime90/90 includes
-16 writers completing insert/update in4.25seconds. Both OSes pass fresh native
-installation and 12-file byte parity (isolated Windows candidate clone uses
-per-process LF configuration); authenticated setup/JSON/exact-marker resume/
-review and independent state privacy pass at366/371-character state paths.
-Codex routing passes with nested-sandbox authentication unavailable; smoke
-confirms installed Claude2.1.287 and excludes opt-in background execution.
-
-Hosted 6c CI passes five jobs but Windows fails88 guarded readback checks:
-the seed helper prepared private children without protecting its explicit root.
-Repairing that root then triggered the test no-provider-execution guard. Seed
-now uses the actual explicit boundary before readback; guard remains unchanged.
-
-Final checks: Mac validate804pass/9platform skips; physical Windows runtime93/93
-and guarded readback98/98 pass. Hosted Windows validate769pass/36platform skips.
-All six source jobs pass in run37659216404 at exact release runtime278fdd1.
-An initial new test had a missing fixture import, now fixed. Fresh native
-Windows main installation uses ordinary Git settings and matches all12 bytes.
-Evidence: `/Users/mylescook/Documents/Codex/2026-10-07-claude-advisor-long-paths`.
-
-Published alpha v0.1.21 at `278fdd1965b498e52f1201742141156f4b02fbbf`.
-Canonical marketplace `6a13ee9aade32cb9ce8379bf65b3ced16c347194` pins that SHA;
-all three marketplace jobs pass in run37661018087. Fresh canonical Git-backed
-installation confirms version, pin and all12 installed bytes. All36 unrelated
-marketplace files remain unchanged. No live cache edits, credential/global
-configuration changes or elevation. User owns refreshing their installation.
-
-Release: https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.21
-Full source CI: https://github.com/MylesMCook/claude-plugin-codex/actions/runs/37659216404
-Marketplace CI: https://github.com/MylesMCook/mcook-plugins/actions/runs/37661018087
-Detailed local evidence and release-receipt.json are in the evidence folder above.
+Next: primary agent reruns exact candidate checks, reviews diff, commits/pushes
+source release, updates the pinned marketplace entry and verifies published
+visibility. User owns active installation. Previous v0.1.21 Windows/runtime
+release was verified at base 278fdd1; details remain in the repository changelog,
+docs/windows-verification.md and GitHub release v0.1.21.

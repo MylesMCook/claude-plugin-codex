@@ -16,8 +16,9 @@ Codex remains the orchestrator.
   it.
 - Keep plugin metadata public-release ready: `.codex-plugin/plugin.json`,
   `.agents/plugins/marketplace.json`, and `README.md` should stay consistent.
-- Keep `package.json` and `plugins/claude-code-advisor/.codex-plugin/plugin.json`
-  on the same version.
+- Keep `package.json` and both manifests in `plugins/claude-code-advisor/`
+  on the same version. The portable manifest owns identity; the native overlay
+  preserves Codex compatibility.
 
 ## Commands
 
@@ -26,8 +27,15 @@ Codex remains the orchestrator.
   This uses the full suite's isolated environment and native process containment.
 - Run `npm run test:smoke` after changes that touch Claude CLI invocation,
   runtime behavior, or install instructions.
-- Run `npm run test:e2e:codex` after changes that affect Codex plugin routing,
-  skill instructions, or public install behavior.
+- Run `npm run test:e2e:codex` after changes to model-driven Codex routing or
+  skill workflow execution. This command uses the active installed plugin and
+  real providers; follow the applicable provider/context approval boundary.
+- For packaging, manifest, asset, or plugin-root identification changes with
+  runtime and workflow execution unchanged, run `npm run test:install:codex`
+  against the candidate. It installs the overlay
+  and portable-only fixtures in disposable homes, checks exact bytes and skill
+  discovery, and calls no model or provider. It supplements live routing checks;
+  report live routing as unrun when it is outside the authorized scope.
 
 ## Claude Model Policy
 

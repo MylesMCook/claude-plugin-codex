@@ -1,6 +1,6 @@
 {
   "name": "claude-plugin-codex",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Bring local Claude Code into Codex for reviews, prepared tasks, advice, and rescue work.",
   "type": "module",
   "private": true,
@@ -8,6 +8,7 @@
     "test": "node tests/run-synthetic.mjs",
     "test:smoke": "node tests/smoke-installed-tools.mjs",
     "test:e2e:codex": "node tests/e2e-codex-skill.mjs",
+    "test:install:codex": "node tests/install-portable-package.mjs",
     "validate": "npm test && node tests/validate-plugin.mjs"
   },
   "engines": {

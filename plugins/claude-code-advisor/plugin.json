@@ -1,0 +1,48 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "claude-code-advisor",
+  "version": "0.1.22",
+  "description": "Bring local Claude Code into Codex for reviews, prepared tasks, advice, and rescue work.",
+  "author": {
+    "name": "Yanchuk and contributors"
+  },
+  "homepage": "https://github.com/MylesMCook/claude-plugin-codex",
+  "repository": "https://github.com/MylesMCook/claude-plugin-codex",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "review",
+    "rescue",
+    "adversarial-review",
+    "harness",
+    "advisor"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Claude Code Advisor",
+        "shortDescription": "Run local Claude Code reviews from Codex.",
+        "longDescription": "Community-maintained integration for using local Claude Code from Codex for read-only reviews, adversarial checks, quick advice, prepared tasks, and explicit rescue work while Codex stays in charge.",
+        "developerName": "Myles Cook",
+        "category": "Coding",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://github.com/MylesMCook/claude-plugin-codex",
+        "privacyPolicyURL": "https://github.com/MylesMCook/claude-plugin-codex/blob/main/PRIVACY.md",
+        "termsOfServiceURL": "https://github.com/MylesMCook/claude-plugin-codex/blob/main/TERMS.md",
+        "defaultPrompt": [
+          "Check Claude Code setup.",
+          "Review or adversarially review this diff with Claude Code.",
+          "Do a prepared task or rescue this work with Claude Code."
+        ],
+        "brandColor": "#D97706",
+        "composerIcon": "./com.openai/assets/icon.svg",
+        "logo": "./com.openai/assets/logo.svg",
+        "screenshots": []
+      }
+    }
+  }
+}

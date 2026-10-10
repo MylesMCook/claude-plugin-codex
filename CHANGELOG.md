@@ -2,6 +2,14 @@
 
 All notable public changes to Claude Code Advisor for Codex are recorded here.
 
+## 0.1.22 - 2026-10-10
+
+- add an Agent Plugins 1.0.0 portable manifest while retaining the native Codex
+  identity, discovery paths and interface metadata
+- include package-local compatibility documentation, changelog and original MIT
+  licence in installed bytes; leave provider execution and permissions unchanged
+- check portable/native version and metadata alignment in synthetic validation
+
 ## 0.1.21 - 2026-10-07
 
 - retry transient Windows file-sharing errors for at most one second while

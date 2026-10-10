@@ -44,8 +44,8 @@ assert.match(readme, /codex plugin add claude-code-advisor@claude-plugin-codex/)
 assert.match(readme, /maintained fork/);
 assert.doesNotMatch(readme, /codex plugin marketplace add yanchuk\/claude-plugin-codex/);
 assert.equal(marketplace.interface?.displayName, "Claude Code Advisor for Codex");
-assert.ok(fs.existsSync("plugins/claude-code-advisor/assets/icon.svg"));
-assert.ok(fs.existsSync("plugins/claude-code-advisor/assets/logo.svg"));
+assert.ok(fs.existsSync("plugins/claude-code-advisor/com.openai/assets/icon.svg"));
+assert.ok(fs.existsSync("plugins/claude-code-advisor/com.openai/assets/logo.svg"));
 for (const publicPath of [
   "CHANGELOG.md",
   "CODE_OF_CONDUCT.md",
