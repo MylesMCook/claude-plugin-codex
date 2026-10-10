@@ -1,47 +1,15 @@
-# Agent Plugins packaging conformance, candidate 0.1.22
+# Agent Plugins packaging conformance, 0.1.22
 
-Objective: make Claude Code Advisor conform where possible and release through
-its existing standalone source and marketplace pin. Owner: Codex on mac-mini;
-isolated implementation checkout `/private/tmp/mcook-portable-fixes.WNpgg0/advisor`,
-branch `main`, base `278fdd1965b498e52f1201742141156f4b02fbbf`. The current user
-requested fixes and “git it out”; the primary agent owns commits and publication.
+Complete. Owner: Codex on mac-mini, isolated checkout `/private/tmp/mcook-portable-fixes.WNpgg0/advisor`, branch `main`. The user requested both package fixes and Git It Out; primary checkouts and unrelated work are preserved.
 
-Implemented, uncommitted: portable `plugins/claude-code-advisor/plugin.json` with
-fixed skill discovery and `extensions.com.openai.interface`; matching native
-manifest and package version 0.1.22; package-local README/CHANGELOG and unchanged
-original MIT licence. Portable packaging needs no native-only exception. The
-workflow still targets Codex. The skill now recognizes a root portable manifest
-or the legacy native manifest; runtime, auth and permission contracts are unchanged.
-New packaging tests enforce identity/version/interface alignment, contained
-assets, discovered skill and installed licence/documentation.
+Released [v0.1.22](https://github.com/MylesMCook/claude-plugin-codex/releases/tag/v0.1.22) as a prerelease, with no assets, at exact implementation commit `67200d2bcbeb1400e0aaa36ace51ac8be4de78c6`. Its tag and marketplace pin match that commit. The portable core adds the root manifest, fixed skill discovery, namespaced OpenAI interface assets, installed documentation and the unchanged original MIT licence. No native-only packaging exception is required. Legacy OpenAI compatibility artifacts remain outside the portable conformance claim. The workflow remains Codex-oriented; provider/runtime, auth and permission contracts are unchanged.
 
-Verified: both packaging regressions failed before (missing portable manifest
-and installed licence), then 2/2 passed. Bundled Agent Plugins validator passed
-with zero warnings using cached jsonschema 4.26.0; skill quick validation passed
-using cached PyYAML 6.0.3; `node tests/validate-plugin.mjs` passed. Codex CLI
-0.162.1 `npm run test:install:codex` passed overlay and portable-only disposable
-fixtures, respectively 16 and 15 exact installed files and stable skill discovery.
-It uses an allowlisted credential-free environment and calls no provider/model.
-The final package moves client-specific icons into `com.openai/assets/`. The new namespace assertion failed before and passes after; exact candidate metadata and both ingestion modes pass. Diff whitespace checks pass.
+Validation: missing portable-manifest/licence regressions failed before migration and passed afterward. Portable/schema and skill validators pass with zero warnings. Native metadata validation passes. Codex CLI 0.162.1 candidate installation passes both overlay and portable-only fixtures, with 16/15 exact files and stable skill discovery. Default Claude Code 2.1.293 version smoke passes. Final local `npm run validate` passes 806 checks with 9 platform-specific skips and zero failures. The initial sandbox-restricted validation was a setup failure; the supported host-permission run supplies the result.
 
-Restricted `npm run validate` failed on sandbox socket/process restrictions; that runner exited. The supported host-permission rerun passed 806 checks with 9 platform-specific skips and zero failures. The exact final candidate rerun also passed 806 checks with 9 platform-specific skips, zero failures, and native metadata validation. OpenAI plugin-creator validator script is absent; source metadata
-validation and actual CLI ingestion passed instead. Live `test:e2e:codex` is
-unrun: it always invokes real Codex exec and Claude setup/advice. Default smoke passed with Claude Code 2.1.293 and intentionally skipped authenticated background calls. Authenticated background smoke needs explicit opt-in.
-No fresh model activation or authenticated provider result is claimed. Packaging-only changes now use candidate ingestion as their local gate; existing live routing tests remain required for changes to workflow execution and provider routing. Legacy native compatibility artifacts are documented outside the portable conformance claim.
+All six [source CI jobs 38083784786](https://github.com/MylesMCook/claude-plugin-codex/actions/runs/38083784786) pass at the exact implementation commit, covering Node 20/22/24 and full Linux/macOS/Windows validation. Windows executes 807 tests with 771 passes, 36 platform-specific skips and zero failures. The licence follow-up preserves original byte parity under `core.autocrlf=true`. The test-only process follow-up records live provider/wrapper creation identities, requires their original identities to exit, and excludes reused PIDs from fixture cleanup. The bounded local timeout file passes 24/24 with no skips. The earlier failing log did not prove PID reuse. Independent final review found no actionable issue.
 
-Next: primary agent reruns exact candidate checks, reviews diff, commits/pushes
-source release, updates the pinned marketplace entry and verifies published
-visibility. User owns active installation. Previous v0.1.21 Windows/runtime
-release was verified at base 278fdd1; details remain in the repository changelog,
-docs/windows-verification.md and GitHub release v0.1.21.
+Marketplace implementation `0c716803e9b33c4585250b632827ebea1b4302e4` pins the exact source commit. All three [marketplace CI jobs 38084519445](https://github.com/MylesMCook/mcook-plugins/actions/runs/38084519445) pass. A disposable Codex home refreshed from the online Git marketplace and installed Advisor from that full pin; all 16 installed files match canonical source bytes. This receipt changes documentation only; the tagged payload and pin stay on the exact tested implementation commit.
 
+Limits: no live `test:e2e:codex`, authenticated background smoke, model activation or other-client runtime claim. Those checks remain required for workflow execution/provider-routing changes. The separate OpenAI validator script is absent; native metadata and actual CLI ingestion passed instead. No active-profile install or refresh command was performed. Active-home CLI listing can lazily materialize caches, so final publication verification used only the disposable home.
 
-Windows release gate follow-up: initial CI attempt stalled at the 20-minute harness deadline before full-suite results. One unchanged retry executed 807 tests: 770 passed, 36 platform skips, one failure. The failure was exact licence parity: root LICENSE checked out as CRLF while the package subtree was pinned to LF. The original licence text and committed content were identical.
-
-Fixed only the root LICENSE checkout attribute to LF. A core.autocrlf=true checkout reproduced the mismatch before and exact original-byte parity after. Both packaging regressions and native metadata validation pass with assertions unchanged. Runtime and package content remain unchanged from f7b45a5.
-
-CI 38082912945 at 4e0dea3 passes Node 20/22/24, Linux and macOS. Windows executes 807 tests with 770 passes, 36 platform skips and one failure in nonreview-launch-exit.test.mjs: the exit assertion observes a nonempty current identity for the logged PID. Licence parity passes. The old log does not prove PID reuse or a surviving original provider.
-
-Test-only correction records the fake provider and native wrapper creation identities while alive. Windows exit assertions require both recorded identities and reject a surviving original identity, with PID and identity diagnostics. Fixture cleanup only adopts matching identities, so reused PIDs cannot authorize cleanup. Existing timeout/error/status/no-fallback assertions and provider/package code are unchanged. The bounded local synthetic file passes 24 tests with no skips; native metadata and whitespace checks pass.
-
-Next: require all six jobs in the new source CI green, publish v0.1.22 at that exact validated commit, then update and validate the marketplace pin. Active-home CLI calls are no longer used because listing can lazily materialize caches. Only disposable-home supported installation is authorized for publication verification.
+No required release work remains. Active installation and a fresh task remain user-owned. Evidence: `/private/tmp/mcook-portable-fixes.WNpgg0/source-ci-final.json`, `marketplace-ci-final.json`, `publication-parity-final.json` and `windows-source-pass.log`. Prior 0.1.21 runtime evidence remains in the changelog and `docs/windows-verification.md`.
