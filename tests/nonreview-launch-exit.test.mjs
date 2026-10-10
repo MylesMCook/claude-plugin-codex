@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { isolatedClaudeEnv } from "./lib/isolated-env.mjs";
-import { fakeClaudeName, writeFakeClaude, windowsProcesses } from "./lib/fake-claude.mjs";
+import { fakeClaudeName, writeFakeClaude, windowsProcesses, nativeUtility } from "./lib/fake-claude.mjs";
 import { fileURLToPath } from "node:url";
 
 import { resolveStateDir, saveState, STATE_VERSION } from "../plugins/claude-code-advisor/scripts/lib/runtime.mjs";
@@ -45,7 +45,10 @@ function fixture(t, { unavailable = false } = {}) {
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.readFileSync(0);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ pid: process.pid, parent: process.ppid, args }) + "\\n");
+const processes = ${process.platform === "win32" ? `JSON.parse(require("node:child_process").execFileSync(${JSON.stringify(nativeUtility())}, ["--list-processes"], { encoding: "utf8", timeout: 10000 }))` : "[]"};
+const identity = processes.find(row => row.pid === process.pid)?.identity;
+const parentIdentity = processes.find(row => row.pid === process.ppid)?.identity;
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ pid: process.pid, parent: process.ppid, identity, parentIdentity, args }) + "\\n");
 if (!args.includes("-p")) process.exit(2);
 const deadline = Date.now() + 15000;
 const timer = setInterval(() => {
@@ -71,9 +74,15 @@ const timer = setInterval(() => {
   const calls = () => fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse) : [];
   const owned = new Map();
   const rememberProcesses = () => {
-    const roots = new Set([...calls().map((call) => call.pid), ...jobs().map((job) => job.supervisor?.pid)].filter(Number.isInteger));
     const windows = process.platform === "win32" ? windowsProcesses() : null;
-    if (windows) for (const call of calls()) roots.add(call.parent);
+    const roots = new Set(jobs().map((job) => job.supervisor?.pid).filter(Number.isInteger));
+    for (const call of calls()) {
+      if (!windows) { roots.add(call.pid); continue; }
+      // A terminated provider's PID may already belong to an unrelated process.
+      for (const [pid, identity] of [[call.pid, call.identity], [call.parent, call.parentIdentity]]) {
+        if (identity && windows.some(row => row.pid === pid && row.identity === identity)) roots.add(pid);
+      }
+    }
     const rows = windows ? windows.map(row => [row.pid, row.parent])
       : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }).trim().split(/\r?\n/)
         .map((line) => line.trim().split(/\s+/).map(Number));
@@ -170,7 +179,18 @@ for (const kind of ["advise", "do", "rescue"]) {
         assert.equal(f.jobs()[0].status, unavailable ? "timed_out" : "failed");
         assert.equal(f.jobs()[0].write, write);
         assert.equal(Object.hasOwn(f.jobs()[0], "supervisor"), false);
-        assert.equal(processIdentity(f.calls()[0].pid), null, "the timed-out fake provider must exit");
+        const provider = f.calls()[0];
+        if (process.platform === "win32") {
+          for (const [pid, identity, label] of [[provider.pid, provider.identity, "fake provider"],
+            [provider.parent, provider.parentIdentity, "native wrapper"]]) {
+            assert.ok(identity, `capture the ${label}'s creation identity while it is running`);
+            const observed = processIdentity(pid);
+            assert.notEqual(observed, identity,
+              `the timed-out ${label} must exit; pid=${pid}, recorded=${identity}, observed=${observed}`);
+          }
+        } else {
+          assert.equal(processIdentity(provider.pid), null, "the timed-out fake provider must exit");
+        }
       });
     }
   }
